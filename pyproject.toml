@@ -1,0 +1,27 @@
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "pyvgmstream"
+version = "0.1.0"
+description = "WEM-first Python package shell for vgmstream public API bindings."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.scikit-build]
+cmake.version = ">=3.20"
+wheel.packages = ["src/pyvgmstream"]

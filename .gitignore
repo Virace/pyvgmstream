@@ -205,3 +205,15 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local project assistant state
+.serena/
+AGENTS.project.md
+
+# Local planning and development outlines
+docs/superpowers/plans/
+task_plan.md
+findings.md
+progress.md
+*-plan.md
+*-outline.md
