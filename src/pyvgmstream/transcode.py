@@ -13,10 +13,10 @@ from os import PathLike
 import os
 from pathlib import Path
 from typing import Iterable
-import wave
 
+from ._wav import write_wav_file
 from .api import open_stream
-from .models import DecodeResult
+from .models import DecodeConfig, DecodeResult, SampleFormat
 
 
 PathInput = str | PathLike[str]
@@ -84,28 +84,38 @@ def transcode_one(
     output_path: PathInput,
     *,
     chunk_frames: int = DEFAULT_CHUNK_FRAMES,
+    config: DecodeConfig | None = None,
 ) -> DecodeResult:
     """把单个输入文件流式导出为 WAV。"""
 
     resolved_source = resolve_root(source_path)
     resolved_output = resolve_root(output_path)
     resolved_output.parent.mkdir(parents=True, exist_ok=True)
+    decode_config = config
 
-    with open_stream(resolved_source) as stream, wave.open(str(resolved_output), "wb") as wav_file:
+    with open_stream(resolved_source, config=decode_config) as stream:
         sample_rate = stream.sample_rate
         channels = stream.channels
-
-        wav_file.setnchannels(channels)
-        wav_file.setsampwidth(2)
-        wav_file.setframerate(sample_rate)
-
+        sample_size = stream.sample_size
+        sample_format = stream.sample_format
+        payload = bytearray()
         total_frames = 0
         while not stream.done:
-            chunk = stream.read_pcm16(chunk_frames)
+            chunk = stream.read_frames(chunk_frames)
             if not chunk:
                 continue
-            wav_file.writeframesraw(chunk)
-            total_frames += len(chunk) // (channels * 2)
+            payload.extend(chunk)
+            total_frames += len(chunk) // (channels * sample_size)
+
+    write_wav_file(
+        resolved_output,
+        sample_format=sample_format,
+        sample_rate=sample_rate,
+        channels=channels,
+        sample_size=sample_size,
+        frame_count=total_frames,
+        pcm_payload=bytes(payload),
+    )
 
     return DecodeResult(
         output_path=resolved_output,
@@ -116,17 +126,18 @@ def transcode_one(
     )
 
 
-def _run_transcode_job(job: tuple[str, str, str | None, int]) -> BatchTranscodeItemResult:
+def _run_transcode_job(job: tuple[str, str, str | None, int, int]) -> BatchTranscodeItemResult:
     """子进程序列化入口。"""
 
-    source_text, output_root_text, input_root_text, chunk_frames = job
+    source_text, output_root_text, input_root_text, chunk_frames, sample_format_value = job
     source_path = Path(source_text)
     input_root = Path(input_root_text) if input_root_text is not None else None
     output_root = Path(output_root_text)
     output_path = build_output_path(source_path, input_root, output_root)
+    config = None if sample_format_value == 0 else DecodeConfig(sample_format=SampleFormat(sample_format_value))
 
     try:
-        result = transcode_one(source_path, output_path, chunk_frames=chunk_frames)
+        result = transcode_one(source_path, output_path, chunk_frames=chunk_frames, config=config)
     except Exception as exc:
         return BatchTranscodeItemResult(
             source_path=source_path,
@@ -153,6 +164,7 @@ def transcode_many(
     workers: int = DEFAULT_MAX_WORKERS,
     chunk_frames: int = DEFAULT_CHUNK_FRAMES,
     dispatch_chunksize: int = DEFAULT_DISPATCH_CHUNKSIZE,
+    config: DecodeConfig | None = None,
 ) -> BatchTranscodeSummary:
     """批量转码任意来源的输入文件列表。"""
 
@@ -161,6 +173,7 @@ def transcode_many(
     worker_count = max(int(workers), 1)
     resolved_chunk_frames = max(int(chunk_frames), 1)
     resolved_dispatch_chunksize = max(int(dispatch_chunksize), 1)
+    decode_config = config
 
     # 先把输入标准化成可序列化的 job 列表，后续才能稳定交给多进程。
     jobs = [
@@ -169,6 +182,7 @@ def transcode_many(
             str(resolved_output_root),
             None if resolved_input_root is None else str(resolved_input_root),
             resolved_chunk_frames,
+            0 if decode_config is None or decode_config.sample_format is None else int(decode_config.sample_format),
         )
         for source_path in sources
     ]
@@ -215,6 +229,7 @@ def transcode_tree(
     dispatch_chunksize: int = DEFAULT_DISPATCH_CHUNKSIZE,
     limit: int | None = None,
     pattern: str = "*.wem",
+    config: DecodeConfig | None = None,
 ) -> BatchTranscodeSummary:
     """递归扫描目录并批量转码为 WAV。"""
 
@@ -233,4 +248,5 @@ def transcode_tree(
         workers=workers,
         chunk_frames=chunk_frames,
         dispatch_chunksize=dispatch_chunksize,
+        config=config,
     )

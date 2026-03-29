@@ -16,6 +16,7 @@ from typing import Protocol, runtime_checkable
 
 from ..api import open_stream
 from ..errors import PyVGMStreamError
+from ..models import DecodeConfig, SampleFormat
 
 
 PathInput = str | PathLike[str]
@@ -246,7 +247,10 @@ class PlaybackSession:
         # 2. 在暂停/停止控制下持续读取 PCM16；
         # 3. 在退出时统一收口状态和资源。
         try:
-            with open_stream(self._source_path) as stream:
+            with open_stream(
+                self._source_path,
+                config=DecodeConfig(sample_format=SampleFormat.PCM16),
+            ) as stream:
                 with self._wait_lock:
                     self._sample_rate = stream.sample_rate
                     self._channels = stream.channels

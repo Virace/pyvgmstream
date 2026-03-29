@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from importlib.resources import files
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -123,6 +124,19 @@ def test_native_module_centralizes_upstream_bridge_helpers() -> None:
     assert "snapshot_decoder" in native_text
     assert "resolve_subsong_index" in native_text
     assert "vendor/vgmstream @ 5d01f5717c1489101918258fbed97659a390c356" in native_text
+
+
+def test_native_default_decode_policy_does_not_force_ignore_loop() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    native_text = repo_root.joinpath("src", "native", "module.cpp").read_text(encoding="utf-8")
+    match = re.search(
+        r"DecodePolicy build_default_decode_policy\(\)\s*\{.*?return DecodePolicy\{\s*(true|false)\s*,",
+        native_text,
+        re.DOTALL,
+    )
+
+    assert match is not None
+    assert match.group(1) == "false"
 
 
 def test_developer_binding_doc_tracks_current_upstream_revision_and_file_mapping() -> None:

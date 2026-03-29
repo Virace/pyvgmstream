@@ -1,15 +1,23 @@
 from __future__ import annotations
 
-import wave
 from pathlib import Path
 
-from pyvgmstream import BatchTranscodeSummary, transcode_tree
+from pyvgmstream import BatchTranscodeSummary, SampleFormat, open_stream, transcode_tree
+from tests.wav_header import inspect_wav_file
 
 
 def test_transcode_tree_returns_summary_and_writes_wav(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     input_root = repo_root / ".temp" / "wem"
     output_root = tmp_path / "wav-out"
+    source_path = next(iter(sorted(input_root.glob("*.wem"))), None)
+    assert source_path is not None
+
+    with open_stream(source_path) as stream:
+        expected_sample_rate = stream.sample_rate
+        expected_channels = stream.channels
+        expected_sample_format = stream.sample_format
+        expected_sample_size = stream.sample_size
 
     summary = transcode_tree(input_root, output_root, workers=1, limit=1)
 
@@ -19,11 +27,13 @@ def test_transcode_tree_returns_summary_and_writes_wav(tmp_path: Path) -> None:
     assert len(summary.results) == 1
     assert summary.results[0].success is True
     assert summary.results[0].output_path.is_file()
-
-    with wave.open(str(summary.results[0].output_path), "rb") as wav_file:
-        assert wav_file.getframerate() > 0
-        assert wav_file.getnchannels() > 0
-        assert wav_file.getnframes() > 0
+    header = inspect_wav_file(summary.results[0].output_path)
+    expected_format_code = 3 if expected_sample_format is SampleFormat.FLOAT else 1
+    assert header["format_code"] == expected_format_code
+    assert header["sample_rate"] == expected_sample_rate
+    assert header["channels"] == expected_channels
+    assert header["bits_per_sample"] == expected_sample_size * 8
+    assert header["data_size"] > 0
 
 
 def test_transcode_tree_preserves_relative_layout(tmp_path: Path) -> None:

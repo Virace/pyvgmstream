@@ -56,12 +56,15 @@ print(info.codec_name)
 
 `StreamHandle` 主要能力：
 
-- 读取 PCM16：`read_pcm16(frame_count)`
+- 读取当前输出格式帧数据：`read_frames(frame_count)`
+- 读取 PCM16 便捷层：`read_pcm16(frame_count)`
 - 查询位置：`tell_samples()` / `tell_seconds()`
 - 跳转与重置：`seek_samples()` / `seek_seconds()` / `reset()`
 - 结束状态：`done`
 - 读取格式元信息：
   - `sample_rate`
+  - `sample_format`
+  - `sample_size`
   - `channels`
   - `input_channels`
   - `channel_layout`
@@ -80,9 +83,11 @@ from pyvgmstream import open_stream
 
 with open_stream("example.wem") as stream:
     print(stream.duration_seconds)
-    chunk = stream.read_pcm16(4096)
+    chunk = stream.read_frames(4096)
     print(len(chunk), stream.tell_seconds(), stream.done)
 ```
+
+如果下游明确只想拿某种采样格式，可通过 `DecodeConfig(sample_format=...)` 显式请求。
 
 ## 4. 单文件 WAV 导出
 
@@ -94,6 +99,8 @@ with open_stream("example.wem") as stream:
 说明：
 
 - 这两个 API 都基于当前解码流能力导出 WAV
+- 默认保留当前流的上游输出采样格式
+- 如果下游想导出特定采样格式，需要通过 `DecodeConfig(sample_format=...)` 显式请求
 - 当前不提供 OGG 导出 API
 
 示例：

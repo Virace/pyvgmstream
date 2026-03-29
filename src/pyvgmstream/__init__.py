@@ -2,7 +2,7 @@
 
 from .api import decode_to_wav_bytes, decode_to_wav_file, open_stream, probe
 from .errors import PyVGMStreamError
-from .models import DecodeResult, StreamInfo
+from .models import DecodeConfig, DecodeResult, SampleFormat, StreamInfo
 from .playback import PCM16Sink, PlaybackSession, PlaybackSnapshot, PlaybackState
 from .stream import StreamHandle
 from .transcode import (
@@ -14,6 +14,8 @@ from .transcode import (
 
 __all__ = [
     "PyVGMStreamError",
+    "SampleFormat",
+    "DecodeConfig",
     "StreamInfo",
     "DecodeResult",
     "BatchTranscodeItemResult",

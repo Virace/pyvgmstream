@@ -7,7 +7,7 @@
 ## Public API
 
 - `probe()`: read stream metadata
-- `open_stream()`: open a decoded PCM16 stream
+- `open_stream()`: open a decoded stream while keeping the upstream output sample format
 - `decode_to_wav_file()`: decode and export to a WAV file
 - `decode_to_wav_bytes()`: decode and export to WAV bytes
 - `transcode_many()` / `transcode_tree()`: batch-transcode into WAV
@@ -16,9 +16,11 @@
 
 The returned `StreamHandle` currently exposes:
 
+- generic frame reads in the current output format: `read_frames(frame_count)`
+- explicit PCM16 convenience reads: `read_pcm16(frame_count)` when the stream is already PCM16 or was requested as PCM16
 - progress queries: `tell_samples()` / `tell_seconds()` / `done`
 - stream position control: `seek_samples()` / `seek_seconds()` / `reset()`
-- upstream-backed format metadata: `input_channels` / `channel_layout` / `stream_samples` / `play_samples` / `duration_seconds` / `stream_bitrate` / `loop_start` / `loop_end` / `play_forever`
+- upstream-backed format metadata: `sample_format` / `sample_size` / `input_channels` / `channel_layout` / `stream_samples` / `play_samples` / `duration_seconds` / `stream_bitrate` / `loop_start` / `loop_end` / `play_forever`
 
 ## Install and Build
 
@@ -96,14 +98,25 @@ info = probe("example.wem")
 print(info.sample_rate, info.channels, info.duration_seconds, info.codec_name)
 ```
 
-Read a PCM16 decoded stream:
+Read a decoded stream in its current output format:
 
 ```python
 from pyvgmstream import open_stream
 
 with open_stream("example.wem") as stream:
-    chunk = stream.read_pcm16(4096)
+    chunk = stream.read_frames(4096)
+    print(stream.sample_format, stream.sample_size, len(chunk))
     print(stream.tell_seconds(), stream.duration_seconds, stream.done)
+```
+
+If you explicitly need the PCM16 convenience layer:
+
+```python
+from pyvgmstream import DecodeConfig, SampleFormat, open_stream
+
+with open_stream("example.wem", config=DecodeConfig(sample_format=SampleFormat.PCM16)) as stream:
+    chunk = stream.read_pcm16(4096)
+    print(len(chunk))
 ```
 
 Export a WAV file:
@@ -114,6 +127,8 @@ from pyvgmstream import decode_to_wav_file
 result = decode_to_wav_file("example.wem", "example.wav")
 print(result.output_path, result.frame_count)
 ```
+
+By default WAV export preserves the current upstream output format. If a downstream wants to request `PCM16` / `PCM24` / `PCM32` explicitly, pass the corresponding `SampleFormat` via `config`.
 
 Export WAV bytes:
 

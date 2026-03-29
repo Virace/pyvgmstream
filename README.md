@@ -7,7 +7,7 @@ English version: `README.en.md`
 ## 公开 API
 
 - `probe()`：读取流元数据
-- `open_stream()`：打开 PCM16 解码流
+- `open_stream()`：打开保持上游输出采样格式的解码流
 - `decode_to_wav_file()`：解码并导出为 WAV 文件
 - `decode_to_wav_bytes()`：解码并导出为 WAV 字节
 - `transcode_many()` / `transcode_tree()`：批量转码为 WAV
@@ -16,9 +16,11 @@ English version: `README.en.md`
 
 基于 `open_stream()` 返回的 `StreamHandle`，当前可用的方法和属性包括：
 
+- 读取当前输出格式帧数据：`read_frames(frame_count)`
+- 显式读取 PCM16：`read_pcm16(frame_count)`，仅在当前流已经是 PCM16 或显式请求 PCM16 时可用
 - 查询解码进度：`tell_samples()` / `tell_seconds()` / `done`
 - 流位置控制：`seek_samples()` / `seek_seconds()` / `reset()`
-- 读取上游格式元信息：`input_channels` / `channel_layout` / `stream_samples` / `play_samples` / `duration_seconds` / `stream_bitrate` / `loop_start` / `loop_end` / `play_forever`
+- 读取上游格式元信息：`sample_format` / `sample_size` / `input_channels` / `channel_layout` / `stream_samples` / `play_samples` / `duration_seconds` / `stream_bitrate` / `loop_start` / `loop_end` / `play_forever`
 
 ## 安装与构建
 
@@ -96,14 +98,25 @@ info = probe("example.wem")
 print(info.sample_rate, info.channels, info.duration_seconds, info.codec_name)
 ```
 
-读取 PCM16 解码流：
+读取保持上游输出采样格式的解码流：
 
 ```python
 from pyvgmstream import open_stream
 
 with open_stream("example.wem") as stream:
-    chunk = stream.read_pcm16(4096)
+    chunk = stream.read_frames(4096)
+    print(stream.sample_format, stream.sample_size, len(chunk))
     print(stream.tell_seconds(), stream.duration_seconds, stream.done)
+```
+
+如果你明确需要 PCM16 便捷层，可以显式请求：
+
+```python
+from pyvgmstream import DecodeConfig, SampleFormat, open_stream
+
+with open_stream("example.wem", config=DecodeConfig(sample_format=SampleFormat.PCM16)) as stream:
+    chunk = stream.read_pcm16(4096)
+    print(len(chunk))
 ```
 
 导出 WAV 文件：
@@ -114,6 +127,8 @@ from pyvgmstream import decode_to_wav_file
 result = decode_to_wav_file("example.wem", "example.wav")
 print(result.output_path, result.frame_count)
 ```
+
+默认 WAV 导出会保留当前流的上游输出格式；如果下游想显式请求 `PCM16` / `PCM24` / `PCM32`，可以在 `config` 里传入对应的 `SampleFormat`。
 
 导出 WAV 字节：
 

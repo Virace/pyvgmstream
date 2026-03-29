@@ -17,14 +17,15 @@
 | --- | --- | --- | --- |
 | 读取流元数据 | `已支持` | `probe()` | 返回 `StreamInfo` |
 | 打开解码流 | `已支持` | `open_stream()` | 返回 `StreamHandle` |
-| 读取 PCM16 数据 | `已支持` | `StreamHandle.read_pcm16()` | 当前公开流格式为 PCM16 |
+| 读取当前输出格式帧数据 | `已支持` | `StreamHandle.read_frames()` | 默认保留上游当前输出采样格式 |
+| 读取 PCM16 数据 | `已支持` | `StreamHandle.read_pcm16()` | 作为显式 PCM16 便捷层保留 |
 | 查询解码进度 | `已支持` | `tell_samples()` / `tell_seconds()` / `done` | 这是解码流进度，不是播放器时钟 |
 | 跳转位置 | `已支持` | `seek_samples()` / `seek_seconds()` | 面向解码流 |
 | 重置流位置 | `已支持` | `reset()` | 回到流起点 |
-| 导出 WAV 文件 | `已支持` | `decode_to_wav_file()` | 当前唯一文件导出格式 |
-| 导出 WAV 字节 | `已支持` | `decode_to_wav_bytes()` | 当前唯一字节导出格式 |
-| 递归批量转 WAV | `已支持` | `transcode_tree()` | 保留相对目录结构，支持多进程 |
-| 批量转 WAV（任意输入列表） | `已支持` | `transcode_many()` | 适合下游自行组织输入集合 |
+| 导出 WAV 文件 | `已支持` | `decode_to_wav_file()` | 默认保留当前上游输出格式；也可显式请求特定采样格式 |
+| 导出 WAV 字节 | `已支持` | `decode_to_wav_bytes()` | 默认保留当前上游输出格式；也可显式请求特定采样格式 |
+| 递归批量转 WAV | `已支持` | `transcode_tree()` | 默认保留当前上游输出格式，保留相对目录结构，支持多进程 |
+| 批量转 WAV（任意输入列表） | `已支持` | `transcode_many()` | 默认保留当前上游输出格式；适合下游自行组织输入集合 |
 | 读取总时长/总样本等元信息 | `已支持` | `StreamInfo` / `StreamHandle` | 直接投影上游公开 `format` 字段 |
 | OGG 输出 | `未支持` | 无 | 当前不提供 OGG 编码或 OGG 导出 API |
 | 音频设备播放 | `部分支持` | `PlaybackSession` + `SoundDeviceSink` | 核心播放 API 已提供；默认设备输出需要安装 `playback` optional extra，也可接自定义 sink |
@@ -81,4 +82,4 @@
 ## 当前包能力的一句话总结
 
 `pyvgmstream` 当前是一个面向 `.wem` 主路径的 Python 解码、WAV 导出和可选播放控制库。  
-它已经支持 metadata、总时长/loop 等上游格式字段投影、PCM16 流读取、进度查询、seek/reset、批量 WAV 转码，以及基于可选 sink 的播放会话控制。
+它已经支持 metadata、总时长/loop 等上游格式字段投影、动态输出格式流读取、显式 PCM16 便捷层、进度查询、seek/reset、批量 WAV 转码，以及基于可选 sink 的播放会话控制。

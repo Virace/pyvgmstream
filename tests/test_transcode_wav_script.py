@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import wave
 from pathlib import Path
+
+from pyvgmstream import SampleFormat, open_stream
+from tests.wav_header import inspect_wav_file
 
 
 def test_transcode_wav_script_prints_resolved_config(tmp_path: Path) -> None:
@@ -46,6 +48,12 @@ def test_transcode_wav_script_writes_wav_for_real_sample(tmp_path: Path) -> None
     sample = next(iter(sorted(input_root.glob("*.wem"))), None)
     assert sample is not None
 
+    with open_stream(sample) as stream:
+        expected_sample_rate = stream.sample_rate
+        expected_channels = stream.channels
+        expected_sample_format = stream.sample_format
+        expected_sample_size = stream.sample_size
+
     output_root = tmp_path / "wav-out"
     result = subprocess.run(
         [
@@ -67,8 +75,10 @@ def test_transcode_wav_script_writes_wav_for_real_sample(tmp_path: Path) -> None
     assert result.returncode == 0
     expected_output = output_root / f"{sample.stem}.wav"
     assert expected_output.is_file()
-
-    with wave.open(str(expected_output), "rb") as wav_file:
-        assert wav_file.getframerate() > 0
-        assert wav_file.getnchannels() > 0
-        assert wav_file.getnframes() > 0
+    header = inspect_wav_file(expected_output)
+    expected_format_code = 3 if expected_sample_format is SampleFormat.FLOAT else 1
+    assert header["format_code"] == expected_format_code
+    assert header["sample_rate"] == expected_sample_rate
+    assert header["channels"] == expected_channels
+    assert header["bits_per_sample"] == expected_sample_size * 8
+    assert header["data_size"] > 0

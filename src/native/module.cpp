@@ -30,6 +30,8 @@ using StreamfilePtr = std::unique_ptr<libstreamfile_t, decltype(&libstreamfile_c
 
 struct FormatSnapshot {
     int sample_rate;
+    libvgmstream_sfmt_t sample_format;
+    int sample_size;
     int channels;
     int input_channels;
     uint32_t channel_layout;
@@ -53,7 +55,7 @@ struct DecoderSnapshot {
 };
 
 struct DecodePolicy {
-    bool ignore_loop;
+    int ignore_loop;
     libvgmstream_sfmt_t force_sample_format;
 };
 
@@ -77,23 +79,31 @@ DecodePolicy build_default_decode_policy() {
     // 如果以后要调整默认解码语义，优先改这个本地 policy，
     // 不要直接在打开流程里散写 libvgmstream_config_t 字段。
     return DecodePolicy{
-        true,
-        LIBVGMSTREAM_SFMT_PCM16,
+        false,
+        static_cast<libvgmstream_sfmt_t>(0),
     };
 }
 
 libvgmstream_config_t build_default_decode_config() {
     const auto policy = build_default_decode_policy();
     libvgmstream_config_t cfg = {};
-    cfg.ignore_loop = policy.ignore_loop;
-    cfg.force_sfmt = policy.force_sample_format;
+    if (policy.ignore_loop >= 0) {
+        cfg.ignore_loop = policy.ignore_loop != 0;
+    }
+    if (policy.force_sample_format) {
+        cfg.force_sfmt = policy.force_sample_format;
+    }
     return cfg;
 }
 
 void apply_decode_policy(libvgmstream_t* lib, const DecodePolicy& policy) {
     libvgmstream_config_t cfg = {};
-    cfg.ignore_loop = policy.ignore_loop;
-    cfg.force_sfmt = policy.force_sample_format;
+    if (policy.ignore_loop >= 0) {
+        cfg.ignore_loop = policy.ignore_loop != 0;
+    }
+    if (policy.force_sample_format) {
+        cfg.force_sfmt = policy.force_sample_format;
+    }
     libvgmstream_setup(lib, &cfg);
 }
 
@@ -114,6 +124,8 @@ FormatSnapshot snapshot_format(const libvgmstream_t* lib) {
     const auto& format = *lib->format;
     return FormatSnapshot{
         format.sample_rate,
+        format.sample_format,
+        format.sample_size,
         format.channels,
         format.input_channels,
         format.channel_layout,
@@ -157,6 +169,8 @@ py::dict make_probe_result(const std::string& source_path, int requested_subsong
     result["subsong"] = resolve_subsong_index(lib, requested_subsong);
     result["backend_name"] = kBackendName;
     result["sample_rate"] = format.sample_rate;
+    result["sample_format"] = static_cast<int>(format.sample_format);
+    result["sample_size"] = format.sample_size;
     result["channels"] = format.channels;
     result["input_channels"] = format.input_channels;
     result["channel_layout"] = format.channel_layout;
@@ -185,9 +199,21 @@ const char* backend_name() {
 
 class NativeStreamHandle {
 public:
-    NativeStreamHandle(const std::string& source_path, int subsong)
+    NativeStreamHandle(
+        const std::string& source_path,
+        int subsong,
+        int sample_format,
+        int ignore_loop
+    )
         : lib_(create_context_or_throw()) {
-        apply_default_decode_policy(lib_.get());
+        auto policy = build_default_decode_policy();
+        if (sample_format != 0) {
+            policy.force_sample_format = static_cast<libvgmstream_sfmt_t>(sample_format);
+        }
+        if (ignore_loop >= 0) {
+            policy.ignore_loop = ignore_loop;
+        }
+        apply_decode_policy(lib_.get(), policy);
 
         auto streamfile = open_input_streamfile_or_throw(source_path);
         const int open_result = libvgmstream_open_stream(lib_.get(), streamfile.get(), subsong);
@@ -196,14 +222,17 @@ public:
         }
     }
 
-    py::bytes read_pcm16(int frame_count) {
+    py::bytes read_frames(int frame_count) {
         ensure_open();
         if (frame_count <= 0) {
             return py::bytes();
         }
 
         const auto format = snapshot_format(lib_.get());
-        std::vector<int16_t> buffer(static_cast<size_t>(frame_count) * static_cast<size_t>(format.channels));
+        const size_t sample_bytes = static_cast<size_t>(format.sample_size);
+        const size_t total_bytes =
+            static_cast<size_t>(frame_count) * static_cast<size_t>(format.channels) * sample_bytes;
+        std::vector<uint8_t> buffer(total_bytes);
         const int err = libvgmstream_fill(lib_.get(), buffer.data(), frame_count);
         if (err < 0) {
             throw std::runtime_error("libvgmstream_fill failed");
@@ -238,6 +267,16 @@ public:
     int sample_rate() const {
         ensure_open();
         return snapshot_format(lib_.get()).sample_rate;
+    }
+
+    int sample_format() const {
+        ensure_open();
+        return static_cast<int>(snapshot_format(lib_.get()).sample_format);
+    }
+
+    int sample_size() const {
+        ensure_open();
+        return snapshot_format(lib_.get()).sample_size;
     }
 
     int channels() const {
@@ -304,9 +343,17 @@ unsigned int vgmstream_version() {
     return libvgmstream_get_version();
 }
 
-py::dict probe(const std::string& source_path, int subsong) {
+py::dict probe(const std::string& source_path, int subsong, int sample_format, int ignore_loop) {
     auto streamfile = open_input_streamfile_or_throw(source_path);
     auto lib = create_context_or_throw();
+    auto policy = build_default_decode_policy();
+    if (sample_format != 0) {
+        policy.force_sample_format = static_cast<libvgmstream_sfmt_t>(sample_format);
+    }
+    if (ignore_loop >= 0) {
+        policy.ignore_loop = ignore_loop;
+    }
+    apply_decode_policy(lib.get(), policy);
 
     const int open_result = libvgmstream_open_stream(lib.get(), streamfile.get(), subsong);
     if (open_result < 0) {
@@ -320,15 +367,31 @@ PYBIND11_MODULE(_native, module, py::mod_gil_not_used()) {
     module.doc() = "Native libvgmstream bindings for pyvgmstream.";
     module.def("backend_name", &backend_name, "Return the current native backend marker.");
     module.def("vgmstream_version", &vgmstream_version, "Return the linked libvgmstream version.");
-    module.def("probe", &probe, "Return probe information from libvgmstream.");
+    module.def(
+        "probe",
+        &probe,
+        py::arg("source_path"),
+        py::arg("subsong") = 0,
+        py::arg("sample_format") = 0,
+        py::arg("ignore_loop") = -1,
+        "Return probe information from libvgmstream."
+    );
     py::class_<NativeStreamHandle>(module, "NativeStreamHandle")
-        .def(py::init<const std::string&, int>(), py::arg("source_path"), py::arg("subsong") = 0)
-        .def("read_pcm16", &NativeStreamHandle::read_pcm16, py::arg("frame_count"))
+        .def(
+            py::init<const std::string&, int, int, int>(),
+            py::arg("source_path"),
+            py::arg("subsong") = 0,
+            py::arg("sample_format") = 0,
+            py::arg("ignore_loop") = -1
+        )
+        .def("read_frames", &NativeStreamHandle::read_frames, py::arg("frame_count"))
         .def("tell_samples", &NativeStreamHandle::tell_samples)
         .def("seek_samples", &NativeStreamHandle::seek_samples, py::arg("position"))
         .def("reset", &NativeStreamHandle::reset)
         .def("close", &NativeStreamHandle::close)
         .def_property_readonly("sample_rate", &NativeStreamHandle::sample_rate)
+        .def_property_readonly("sample_format", &NativeStreamHandle::sample_format)
+        .def_property_readonly("sample_size", &NativeStreamHandle::sample_size)
         .def_property_readonly("channels", &NativeStreamHandle::channels)
         .def_property_readonly("input_channels", &NativeStreamHandle::input_channels)
         .def_property_readonly("channel_layout", &NativeStreamHandle::channel_layout)

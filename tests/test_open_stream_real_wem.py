@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from pyvgmstream import StreamHandle, open_stream
+from pyvgmstream import SampleFormat, StreamHandle, open_stream
 from pyvgmstream import _native
 
 
@@ -20,6 +20,8 @@ def test_open_stream_real_wem_supports_read_and_seek() -> None:
     with open_stream(sample) as stream:
         assert isinstance(stream, StreamHandle)
         assert stream.sample_rate > 0
+        assert isinstance(stream.sample_format, SampleFormat)
+        assert stream.sample_size > 0
         assert stream.channels > 0
         assert stream.input_channels > 0
         assert stream.channel_layout >= 0
@@ -31,10 +33,10 @@ def test_open_stream_real_wem_supports_read_and_seek() -> None:
         assert stream.loop_end >= 0
         assert isinstance(stream.play_forever, bool)
 
-        chunk = stream.read_pcm16(1024)
+        chunk = stream.read_frames(1024)
         assert isinstance(chunk, bytes)
         assert chunk
-        assert len(chunk) % (stream.channels * 2) == 0
+        assert len(chunk) % (stream.channels * stream.sample_size) == 0
         assert stream.tell_samples() > 0
         assert stream.tell_seconds() >= 0.0
 
@@ -60,6 +62,6 @@ def test_open_stream_real_wem_supports_unicode_path(tmp_path: Path) -> None:
     unicode_sample.write_bytes(sample.read_bytes())
 
     with open_stream(unicode_sample) as stream:
-        chunk = stream.read_pcm16(1024)
+        chunk = stream.read_frames(1024)
 
     assert chunk

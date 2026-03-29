@@ -10,6 +10,8 @@ def test_public_api_exports_expected_entrypoints() -> None:
     assert pyvgmstream.__version__ == "0.1.0"
     assert pyvgmstream.__all__ == [
         "PyVGMStreamError",
+        "SampleFormat",
+        "DecodeConfig",
         "StreamInfo",
         "DecodeResult",
         "BatchTranscodeItemResult",

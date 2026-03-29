@@ -1,13 +1,31 @@
+"""解码流句柄包装。"""
+
 from __future__ import annotations
+
+from .models import SampleFormat
 
 
 class StreamHandle:
+    """面向 Python 的解码流句柄薄包装。"""
+
     def __init__(self, native_handle: object) -> None:
         self._native_handle = native_handle
 
     @property
     def sample_rate(self) -> int:
         return self._native_handle.sample_rate
+
+    @property
+    def sample_format(self) -> SampleFormat:
+        """返回当前输出缓冲区的采样格式。"""
+
+        return SampleFormat(self._native_handle.sample_format)
+
+    @property
+    def sample_size(self) -> int:
+        """返回单个采样占用的字节数。"""
+
+        return self._native_handle.sample_size
 
     @property
     def channels(self) -> int:
@@ -55,8 +73,37 @@ class StreamHandle:
     def done(self) -> bool:
         return self._native_handle.done
 
+    def read_frames(self, frame_count: int) -> bytes:
+        """读取当前输出格式的交错音频帧。
+
+        Args:
+            frame_count: 希望读取的帧数。
+
+        Returns:
+            bytes: 当前流输出格式对应的原始帧数据。
+        """
+
+        return self._native_handle.read_frames(frame_count)
+
     def read_pcm16(self, frame_count: int) -> bytes:
-        return self._native_handle.read_pcm16(frame_count)
+        """读取 PCM16 帧数据便捷层。
+
+        Args:
+            frame_count: 希望读取的帧数。
+
+        Returns:
+            bytes: PCM16 交错帧数据。
+
+        Raises:
+            ValueError: 当前流输出格式不是 PCM16。
+        """
+
+        if self.sample_format is not SampleFormat.PCM16:
+            raise ValueError(
+                "current stream format is not PCM16; "
+                "use read_frames() or request PCM16 explicitly via DecodeConfig"
+            )
+        return self.read_frames(frame_count)
 
     def tell_samples(self) -> int:
         return self._native_handle.tell_samples()
