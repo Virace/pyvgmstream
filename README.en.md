@@ -2,19 +2,29 @@
 
 中文说明见 `README.md`
 
-`pyvgmstream` is a Python wrapper around `vgmstream`'s public `libvgmstream` API, currently focused on the `.wem` path.
+`pyvgmstream` is a Python wrapper around `vgmstream`'s public `libvgmstream` API.
 
 ## Public API
 
 - `probe()`: read stream metadata
-- `open_stream()`: open a decoded PCM16 stream
+- `probe_buffer()`: read stream metadata from in-memory input
+- `open_stream()`: open a decoded stream while keeping the upstream output sample format
+- `open_stream_from_buffer()`: open a decoded stream from in-memory input
+- `set_log_callback()` / `disable_log_callback()`: configure or disable the upstream global log callback
 - `decode_to_wav_file()`: decode and export to a WAV file
 - `decode_to_wav_bytes()`: decode and export to WAV bytes
+- `decode_buffer_to_wav_file()` / `decode_buffer_to_wav_bytes()`: decode in-memory input and export to WAV
+- `transcode_many()` / `transcode_tree()`: batch-transcode into WAV
+- `PlaybackSession` / `PlaybackSnapshot` / `PCM16Sink`: playback control core
+- `pyvgmstream.playback.backends.sounddevice.create_sounddevice_session()`: default optional playback backend
 
 The returned `StreamHandle` currently exposes:
 
+- generic frame reads in the current output format: `read_frames(frame_count)`
+- explicit PCM16 convenience reads: `read_pcm16(frame_count)` when the stream is already PCM16 or was requested as PCM16
 - progress queries: `tell_samples()` / `tell_seconds()` / `done`
 - stream position control: `seek_samples()` / `seek_seconds()` / `reset()`
+- upstream-backed format metadata: `sample_format` / `sample_size` / `input_channels` / `channel_layout` / `stream_samples` / `play_samples` / `duration_seconds` / `stream_bitrate` / `loop_start` / `loop_end` / `play_forever`
 
 ## Install and Build
 
@@ -63,13 +73,18 @@ Install from the current repository:
 - `uv pip install .`
 - `pip install .`
 
+If you want the default local playback backend, install the optional extra:
+
+- `pip install "pyvgmstream[playback]"`
+
 Force a source build:
 
 - `pip install --no-binary pyvgmstream pyvgmstream`
 
 ### Current note
 
-- The repository workflow currently targets Python `3.10` first for three-platform build verification.
+- The project's officially supported Python range currently starts at `>=3.10`.
+- The release workflow builds three platforms starting from Python `3.10`.
 - The current platform targets are:
   - Windows: `x64`
   - Linux: `x86_64`
@@ -84,17 +99,57 @@ Read metadata:
 from pyvgmstream import probe
 
 info = probe("example.wem")
-print(info.sample_rate, info.channels, info.codec_name)
+print(info.sample_rate, info.channels, info.duration_seconds, info.codec_name)
 ```
 
-Read a PCM16 decoded stream:
+Read metadata from in-memory `.wem` data:
+
+```python
+from pyvgmstream import probe_buffer
+
+buffer_info = probe_buffer(wem_bytes, filename_hint="sound.wem")
+print(buffer_info.sample_rate, buffer_info.sample_format)
+```
+
+Attach the upstream log callback:
+
+```python
+from pyvgmstream import LogLevel, disable_log_callback, set_log_callback
+
+set_log_callback(lambda level, message: print(level, message), level=LogLevel.INFO)
+# ... run probe/open_stream/decode operations
+disable_log_callback()
+```
+
+Read a decoded stream in its current output format:
 
 ```python
 from pyvgmstream import open_stream
 
 with open_stream("example.wem") as stream:
+    chunk = stream.read_frames(4096)
+    print(stream.sample_format, stream.sample_size, len(chunk))
+    print(stream.tell_seconds(), stream.duration_seconds, stream.done)
+```
+
+Open a decoded stream from in-memory input:
+
+```python
+from pyvgmstream import open_stream_from_buffer
+
+with open_stream_from_buffer(wem_bytes, filename_hint="sound.wem") as stream:
+    chunk = stream.read_frames(4096)
+    print(stream.sample_rate, len(chunk))
+```
+
+If you explicitly need the PCM16 convenience layer:
+
+```python
+from pyvgmstream import DecodeConfig, SampleFormat, open_stream
+
+with open_stream("example.wem", config=DecodeConfig(sample_format=SampleFormat.PCM16)) as stream:
     chunk = stream.read_pcm16(4096)
-    print(stream.tell_seconds(), stream.done)
+    print(len(chunk))
 ```
 
 Export a WAV file:
@@ -106,6 +161,8 @@ result = decode_to_wav_file("example.wem", "example.wav")
 print(result.output_path, result.frame_count)
 ```
 
+By default WAV export preserves the current upstream output format. If a downstream wants to request `PCM16` / `PCM24` / `PCM32` explicitly, pass the corresponding `SampleFormat` via `config`.
+
 Export WAV bytes:
 
 ```python
@@ -115,6 +172,39 @@ payload = decode_to_wav_bytes("example.wem")
 print(len(payload))
 ```
 
+Decode in-memory data directly into WAV:
+
+```python
+from pyvgmstream import decode_buffer_to_wav_bytes
+
+payload = decode_buffer_to_wav_bytes(wem_bytes, filename_hint="sound.wem")
+print(len(payload))
+```
+
+Recursively batch-transcode into WAV:
+
+```python
+from pyvgmstream import transcode_tree
+
+summary = transcode_tree("input_wem", "output_wav", workers=4)
+print(summary.processed_count, summary.failed_count)
+```
+
+Use the default optional playback backend:
+
+```python
+from pyvgmstream.playback.backends.sounddevice import create_sounddevice_session
+
+session = create_sounddevice_session("example.wem", volume_percent=25.0)
+session.start()
+session.wait()
+print(session.snapshot().duration_seconds)
+```
+
+For the fuller API surface, see:
+
+- `docs/api.md`
+
 ## License
 
 - The wrapper code is licensed under `BSD-3-Clause`; see `LICENSE`
@@ -122,3 +212,4 @@ print(len(payload))
 - The currently included third-party license texts include:
   - `LICENSES/pybind11.txt`
   - `vendor/vgmstream/COPYING`
+  - `vendor/vgmstream/ext_libs/licenses/*`

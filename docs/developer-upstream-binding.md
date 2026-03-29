@@ -12,7 +12,7 @@
 
 其中：
 
-- Python 层基本是薄封装，只负责参数整理、结果投影、异常语义和 WAV 导出。
+- Python 层基本是薄封装，只负责参数整理、结果投影、异常语义、WAV 导出，以及批量转码 / 播放会话这类围绕公开解码流的高层能力。
 - C++ 层只包含上游公开头文件 `libvgmstream.h` 与 `libvgmstream_streamfile.h`，没有直接依赖上游内部头 `vgmstream.h`。
 - 构建层当前直接依赖 vendored 上游仓库的目录结构、CMake 入口和目标名，因此“运行时 API 耦合”不算高，但“源码仓库 / 构建系统耦合”相对更高。
 
@@ -84,9 +84,17 @@
 - `libvgmstream_t::decoder`
 - `libvgmstream_format_t::sample_rate`
 - `libvgmstream_format_t::channels`
+- `libvgmstream_format_t::input_channels`
+- `libvgmstream_format_t::channel_layout`
 - `libvgmstream_format_t::subsong_index`
 - `libvgmstream_format_t::subsong_count`
+- `libvgmstream_format_t::stream_samples`
+- `libvgmstream_format_t::play_samples`
+- `libvgmstream_format_t::stream_bitrate`
+- `libvgmstream_format_t::loop_start`
+- `libvgmstream_format_t::loop_end`
 - `libvgmstream_format_t::loop_flag`
+- `libvgmstream_format_t::play_forever`
 - `libvgmstream_format_t::codec_name`
 - `libvgmstream_format_t::layout_name`
 - `libvgmstream_format_t::meta_name`
@@ -129,17 +137,19 @@
 
 `open_stream()` 的路径是：
 
-1. Python 层调用 `_native.NativeStreamHandle(path, subsong)`
+1. Python 层调用 `_native.NativeStreamHandle(path, subsong, sample_format)`
 2. 原生层初始化 `libvgmstream`
-3. 应用固定配置：
-   - `ignore_loop = true`
-   - `force_sfmt = LIBVGMSTREAM_SFMT_PCM16`
+3. 应用本地默认配置：
+   - 默认不再覆盖 `ignore_loop`
+   - 默认不再设置 `force_sfmt`
+   - 只有下游显式请求 `DecodeConfig(sample_format=...)` 时，才把 `force_sfmt` 传给上游
+   - 只有下游显式请求 `DecodeConfig(ignore_loop=...)` 时，才覆盖 loop 语义
 4. 通过 `libstreamfile_open_from_stdio(...)` 打开本地文件
 5. 通过 `libvgmstream_open_stream(...)` 打开目标流
 6. 返回 `NativeStreamHandle`
 7. Python 层再包一层 `StreamHandle`
 
-因此当前 `open_stream()` 返回的不是任意采样格式流，而是已经被固定成 PCM16 的解码流句柄。
+因此当前 `open_stream()` 默认返回的是“保持上游当前输出采样格式”的解码流；PCM16 只作为显式便捷层保留，而不是唯一公共语义。
 
 当前实现里，这组默认值不再直接散落在打开流程中，而是先收敛到本地 policy 命名层，再转换成上游配置结构：
 
@@ -152,35 +162,75 @@
 
 `StreamHandle` 基本不持有业务状态，而是把调用转发给原生句柄：
 
-- `read_pcm16(frame_count)` -> `libvgmstream_fill(...)`
+- `read_frames(frame_count)` -> `libvgmstream_fill(...)`
+- `read_pcm16(frame_count)` -> 仅在当前流已经是 PCM16 时，复用 `read_frames(...)`
 - `tell_samples()` -> `libvgmstream_get_play_position(...)`
 - `seek_samples(position)` -> `libvgmstream_seek(...)`
 - `reset()` -> `libvgmstream_reset(...)`
 - `done` -> 读取 `lib->decoder->done`
-- `sample_rate` / `channels` -> 读取 `lib->format`
+- `sample_rate` / `sample_format` / `sample_size` / `channels` -> 读取 `lib->format`
 
-其中 `read_pcm16()` 的关键点是：
+其中 `read_frames()` 的关键点是：
 
-- Python 侧要求“读取 N 帧 PCM16”
-- 原生侧先按 `channels * frame_count` 分配 `int16_t` buffer
+- Python 侧要求“读取 N 帧当前输出格式数据”
+- 原生侧先按 `channels * frame_count * sample_size` 分配原始字节 buffer
 - 调 `libvgmstream_fill(...)` 让上游填充
 - 再依据 `lib->decoder->buf_bytes` 把真实有效字节数返回给 Python
 
 因此“上游负责解码与 EOF 语义”，而“本仓库负责把上游结果整理成 Python 可消费的字节流”。
+
+当前 `StreamHandle` 还会把一批只读格式字段继续透出给 Python：
+
+- `input_channels`
+- `channel_layout`
+- `stream_samples`
+- `play_samples`
+- `duration_seconds`
+- `stream_bitrate`
+- `loop_start`
+- `loop_end`
+- `play_forever`
+
+其中只有 `duration_seconds` 是基于 `play_samples / sample_rate` 的轻量派生，其余字段都直接来自上游公开 `format` 结构。
 
 ### 3.4 `decode_to_wav_file()` / `decode_to_wav_bytes()` 的原理
 
 这两个 API 没有走任何上游 WAV 导出接口，而是：
 
 1. 先调用 `open_stream()`
-2. 循环调用 `read_pcm16(4096)`
-3. 用 Python 标准库 `wave` 写入 WAV 头和 PCM 数据
+2. 循环调用 `read_frames(4096)`
+3. 按当前 `sample_format` / `sample_size` 用本仓库自己的 RIFF/WAVE 封装辅助层写出头和帧数据
 4. 最后返回字节或写入文件
 
 因此：
 
 - 上游只负责“打开流 + 解码 PCM”
 - WAV 封装完全由 Python 层完成
+- 通用流 API 默认不再静默把 24/32 位输出压成 PCM16
+- `decode_to_wav_*()` / `transcode_*()` 也默认保留上游当前输出采样格式；如果下游要请求特定格式，必须通过 `DecodeConfig(sample_format=...)` 明确表达
+
+### 3.5 `transcode_many()` / `transcode_tree()` 的原理
+
+批量转码能力没有引入新的上游入口，而是把现有解码流 API 重新编排成目录批处理：
+
+1. Python 层递归扫描输入路径或消费外部传入的文件列表
+2. 每个文件调用 `open_stream()`
+3. 循环 `read_frames(...)`
+4. 用本地 WAV 封装辅助层写出头和帧数据
+5. 在批量层汇总成功/失败结果
+
+因此批量转码的核心依赖仍然是当前公开解码流能力，而不是额外的上游导出接口。
+
+### 3.6 `PlaybackSession` 的原理
+
+播放会话能力同样没有引入新的上游播放器 API，而是复用解码流：
+
+1. `PlaybackSession` 打开 `StreamHandle`
+2. 后台线程循环读取 PCM16 数据
+3. 把 chunk 写给 `PCM16Sink`
+4. 用 `PlaybackSnapshot` 暴露当前进度、状态和上游格式元信息
+
+这意味着当前播放能力本质上是“围绕解码流构建的本地编排层”，而不是对上游内部播放器逻辑的直接映射；它会显式请求 PCM16，避免把 PCM16-only 语义扩散到整个通用流 API。
 
 这也是为什么当前导出能力仅限于 WAV，而不是上游支持什么封装就自动暴露什么封装。
 
@@ -214,12 +264,24 @@
 
 ### B. 打开路径与 IO 适配耦合
 
-当前只使用 `libstreamfile_open_from_stdio(...)` 这条路径。
+当前 runtime 输入有两条路径：
+
+- `libstreamfile_open_from_stdio(...)`：本地路径输入
+- 本仓库自定义的 memory-backed `libstreamfile_t`：单文件内存输入
 
 这意味着：
 
-- 当前只直接支持基于本地路径的文件打开
-- 内存流、自定义文件系统、非磁盘来源都还没有隔离成独立适配层
+- 当前已支持基于本地路径的文件打开
+- 当前已支持 `bytes` / `bytearray` / `memoryview` + `filename_hint` 的单文件内存输入
+- 通用 Python file-like、自定义文件系统和 companion-file reopen 仍未隔离成独立适配层
+
+### B2. 全局日志回调耦合
+
+当前已经桥接 `libvgmstream_set_log()`，但它仍然有一个需要维护者记住的边界：
+
+- 这是全局回调，不是挂在单个 `libvgmstream_t` 上的实例级回调
+- Python 侧现在通过 `set_log_callback()` / `disable_log_callback()` 暴露这层能力
+- 维护时需要注意 GIL、全局状态和 callback 生命周期
 
 ### C. 仓库布局 / CMake 目标耦合
 
@@ -248,7 +310,7 @@
 2. 原生桥接层：先看 `src/native/module.cpp`
    这里集中维护默认解码策略、上游公开结构快照、Python 绑定导出。
 3. Python 壳层：先看 `src/pyvgmstream/api.py` / `src/pyvgmstream/stream.py` / `src/pyvgmstream/models.py`
-   这里负责对象模型、上下文管理和 WAV 导出，不负责上游解码细节。
+   这里负责对象模型、上下文管理、buffer/path 双入口和 WAV 导出，不负责上游解码细节。
 4. 结构与约束校验：先看 `tests/test_package_layout.py`
    这里不是业务测试，而是仓库结构、溯源锚点和本地适配分层的守门测试。
 
@@ -256,6 +318,8 @@
 
 | 场景 | 先看哪个本地文件 | 再看哪个上游文件 | 验证方式 |
 | --- | --- | --- | --- |
+| 想调整上游日志桥接或把日志接到别的 Python 日志系统 | `src/native/module.cpp`、`src/pyvgmstream/log.py` | `vendor/vgmstream/src/libvgmstream.h` | `uv run pytest -q tests/test_log_api.py`，必要时再跑 `uv run pytest -q tests` |
+| 想调整内存输入适配层或 `*_buffer` API | `src/native/module.cpp`、`src/pyvgmstream/api.py` | `vendor/vgmstream/src/libvgmstream_streamfile.h` | `uv run pytest -q tests/test_buffer_api.py tests/test_buffer_real_wem.py`，必要时再跑 `uv run pytest -q tests` |
 | 上游仓库目录布局变了，导致构建失败 | `cmake/resolve_vgmstream.cmake` | `vendor/vgmstream/CMakeLists.txt`、`vendor/vgmstream/cmake/vgmstream.cmake`、`vendor/vgmstream/src/CMakeLists.txt` | `uv run pytest -q tests/test_package_layout.py`，必要时再跑 `uv run pytest -q tests` |
 | 上游目标名、include 或 Windows 运行时文件路径变了 | `cmake/resolve_vgmstream.cmake` | 同上，再加 `vendor/vgmstream/ext_libs` 相关路径 | `uv run pytest -q tests/test_package_layout.py`，再做一次实际构建链验证 |
 | 想调整默认解码策略，例如 loop 或输出 sample format | `src/native/module.cpp` 中的 `DecodePolicy` / `build_default_decode_policy()` / `apply_decode_policy(...)` | `vendor/vgmstream/src/libvgmstream.h` | `uv run pytest -q tests` |
@@ -287,7 +351,7 @@
 
 - 一个针对 `.wem` 主路径的 Python 包装层
 - 一个把上游公开解码能力投影成 Python 可用 API 的适配器
-- 一个在 Python 层补齐对象模型、上下文管理和 WAV 封装的壳层
+- 一个在 Python 层补齐对象模型、上下文管理、批量转码和可选播放会话的壳层
 
 换句话说，当前 API 的职责是“把上游公开解码接口变成 Python 友好的使用方式”，而不是“吸收上游所有复杂性并重新定义一套音频框架”。
 
@@ -325,7 +389,11 @@
 
 ### 6.3 第三优先级：把输入源适配从 `stdio` 路径抽象出来
 
-当前 `libstreamfile_open_from_stdio(...)` 直接把“输入一定来自本地路径”编码进了绑定层。
+之前 `libstreamfile_open_from_stdio(...)` 直接把“输入一定来自本地路径”编码进了绑定层。现在这一点已经被部分收口：
+
+- 路径输入仍走 `libstreamfile_open_from_stdio(...)`
+- 单文件内存输入走本地 memory-backed `libstreamfile_t`
+- 更通用的 file-like / 自定义 opener 仍未实现
 
 如果后续要降低这部分耦合，可以：
 
@@ -342,8 +410,10 @@
 
 当前 `open_stream()` 会固定：
 
-- `ignore_loop = true`
-- `force_sfmt = LIBVGMSTREAM_SFMT_PCM16`
+- 默认不设置 `ignore_loop`
+- 默认不设置 `force_sfmt`
+- 仅在下游显式请求 `DecodeConfig(sample_format=...)` 时才传递 `force_sfmt`
+- 仅在下游显式请求 `DecodeConfig(ignore_loop=...)` 时才传递 `ignore_loop`
 
 这本身不是坏事，但它让 Python API 语义直接绑定了当前上游配置方式。
 

@@ -58,14 +58,37 @@ jobs:
           - name: linux-x86_64
             runner: ubuntu-latest
             cibw_arch: x86_64
+            cibw_build: "cp310-* cp311-* cp312-* cp313-* cp314-*"
             cibw_skip: "*-manylinux_i686 *-musllinux_*"
-          - name: windows-x64
+          - name: windows-x64-py310
             runner: windows-latest
             cibw_arch: AMD64
+            cibw_build: "cp310-win_amd64"
+            cibw_skip: "*-win32"
+          - name: windows-x64-py311
+            runner: windows-latest
+            cibw_arch: AMD64
+            cibw_build: "cp311-win_amd64"
+            cibw_skip: "*-win32"
+          - name: windows-x64-py312
+            runner: windows-latest
+            cibw_arch: AMD64
+            cibw_build: "cp312-win_amd64"
+            cibw_skip: "*-win32"
+          - name: windows-x64-py313
+            runner: windows-latest
+            cibw_arch: AMD64
+            cibw_build: "cp313-win_amd64"
+            cibw_skip: "*-win32"
+          - name: windows-x64-py314
+            runner: windows-latest
+            cibw_arch: AMD64
+            cibw_build: "cp314-win_amd64"
             cibw_skip: "*-win32"
           - name: macos-arm64
             runner: macos-14
             cibw_arch: arm64
+            cibw_build: "cp310-* cp311-* cp312-* cp313-* cp314-*"
             cibw_skip: ""
 
     steps:
@@ -78,14 +101,16 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: 安装构建工具
         run: python -m pip install --upgrade pip cibuildwheel
 
       - name: 构建 wheel
         env:
-          # 先只验证 cp310，确认三平台主链稳定后再放开到 3.11+。
-          CIBW_BUILD: "cp310-*"
+          # 发布前执行三平台全版本回归；Windows 按 Python 版本拆分为独立 job。
+          CIBW_BUILD: "${{ matrix.cibw_build }}"
           CIBW_SKIP: "${{ matrix.cibw_skip }}"
           CIBW_BUILD_VERBOSITY: "1"
           CIBW_ARCHS: "${{ matrix.cibw_arch }}"
@@ -118,6 +143,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: 安装构建工具
         run: python -m pip install --upgrade pip build

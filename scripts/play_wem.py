@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import argparse
-from array import array
 import json
 from pathlib import Path
-
-from pyvgmstream import open_stream
-
+import time
 
 DEFAULT_VOLUME_PERCENT = 10.0
-DEFAULT_BLOCK_FRAMES = 4096
 
 
 def default_sample_path() -> Path:
@@ -33,35 +29,32 @@ def resolve_source(source: str | None) -> Path:
     return Path(source).expanduser().resolve() if source else default_sample_path()
 
 
-def scale_pcm16(chunk: bytes, volume_percent: float) -> bytes:
-    factor = max(volume_percent, 0.0) / 100.0
-    samples = array("h")
-    samples.frombytes(chunk)
-    for index, value in enumerate(samples):
-        scaled = int(value * factor)
-        if scaled > 32767:
-            scaled = 32767
-        elif scaled < -32768:
-            scaled = -32768
-        samples[index] = scaled
-    return samples.tobytes()
-
-
 def play(source_path: Path, volume_percent: float, max_seconds: float | None) -> None:
-    import sounddevice as sd
+    from pyvgmstream.playback import PlaybackState
+    from pyvgmstream.playback.backends.sounddevice import create_sounddevice_session
 
-    with open_stream(source_path) as stream:
-        with sd.RawOutputStream(
-            samplerate=stream.sample_rate,
-            channels=stream.channels,
-            dtype="int16",
-        ) as output_stream:
-            while not stream.done:
-                chunk = stream.read_pcm16(DEFAULT_BLOCK_FRAMES)
-                if chunk:
-                    output_stream.write(scale_pcm16(chunk, volume_percent))
-                if max_seconds is not None and stream.tell_seconds() >= max_seconds:
+    session = create_sounddevice_session(source_path, volume_percent=volume_percent)
+    session.start()
+
+    try:
+        if max_seconds is None:
+            session.wait()
+        else:
+            while True:
+                snapshot = session.snapshot()
+                if snapshot.state in {PlaybackState.FINISHED, PlaybackState.STOPPED, PlaybackState.ERROR}:
                     break
+                if snapshot.position_seconds >= max_seconds:
+                    session.stop()
+                    break
+                time.sleep(0.01)
+    finally:
+        if session.snapshot().state not in {PlaybackState.FINISHED, PlaybackState.STOPPED, PlaybackState.ERROR}:
+            session.stop()
+
+    snapshot = session.snapshot()
+    if snapshot.state is PlaybackState.ERROR:
+        raise RuntimeError(snapshot.recent_error or "playback failed")
 
 
 def main() -> int:

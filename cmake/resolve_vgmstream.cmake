@@ -5,6 +5,8 @@ function(pyvgmstream_replace_link_item list_var old_item new_item)
     foreach(link_item IN LISTS ${list_var})
         if(link_item STREQUAL "${old_item}")
             list(APPEND updated_items "${new_item}")
+        elseif(link_item STREQUAL "$<LINK_ONLY:${old_item}>")
+            list(APPEND updated_items "$<LINK_ONLY:${new_item}>")
         else()
             list(APPEND updated_items "${link_item}")
         endif()
@@ -92,6 +94,12 @@ function(pyvgmstream_resolve_vgmstream)
 
     add_subdirectory("${vgm_source_dir}/src" "${vgm_binary_dir}/src" EXCLUDE_FROM_ALL)
 
+    if(WIN32 AND TARGET libvgmstream)
+        # Windows 下让上游 stdio streamfile 走 UTF-8 -> wchar_t 的 _wfopen 分支，
+        # 否则中文等非 ASCII 路径会在打开阶段直接失败。
+        target_compile_definitions(libvgmstream PRIVATE VGM_STDIO_UNICODE)
+    endif()
+
     if(APPLE AND USE_VORBIS AND TARGET libvgmstream)
         # system VorbisFile 通过 imported target 暴露绝对库路径，
         # 这里把上游导出的裸库名改写掉，避免 macOS 最终链接时只剩 -lvorbisfile/-lvorbis/-logg。
@@ -122,5 +130,13 @@ endfunction()
 
 
 function(pyvgmstream_apply_vgmstream_target_defaults target_name)
-    setup_target(${target_name} TRUE)
+    if(WIN32)
+        # Windows 仍然需要 setup_target(..., TRUE) 给最终模块补上 libvorbis import lib，
+        # 否则 _native 会在链接阶段丢失 ov_* / vorbis_* 符号。
+        setup_target(${target_name} TRUE)
+    else()
+        # _native 已经通过 pyvgmstream::vgmstream 间接链接 libvgmstream，
+        # 非 Windows 这里只需要同步编译定义和头文件路径，不能再次把上游裸库名塞回最终模块。
+        setup_target(${target_name} FALSE)
+    endif()
 endfunction()

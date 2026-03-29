@@ -10,13 +10,30 @@ def test_public_api_exports_expected_entrypoints() -> None:
     assert pyvgmstream.__version__ == "0.1.0"
     assert pyvgmstream.__all__ == [
         "PyVGMStreamError",
+        "LogLevel",
+        "set_log_callback",
+        "disable_log_callback",
+        "SampleFormat",
+        "DecodeConfig",
         "StreamInfo",
         "DecodeResult",
+        "BatchTranscodeItemResult",
+        "BatchTranscodeSummary",
         "StreamHandle",
+        "PlaybackState",
+        "PlaybackSnapshot",
+        "PlaybackSession",
+        "PCM16Sink",
         "probe",
+        "probe_buffer",
         "open_stream",
+        "open_stream_from_buffer",
         "decode_to_wav_file",
         "decode_to_wav_bytes",
+        "decode_buffer_to_wav_file",
+        "decode_buffer_to_wav_bytes",
+        "transcode_many",
+        "transcode_tree",
     ]
 
 

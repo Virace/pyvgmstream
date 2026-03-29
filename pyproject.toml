@@ -14,14 +14,20 @@ license-files = [
     "THIRD_PARTY_NOTICES.md",
     "LICENSES/*",
     "vendor/vgmstream/COPYING",
+    "vendor/vgmstream/ext_libs/licenses/*",
 ]
 dependencies = []
+
+[project.optional-dependencies]
+playback = [
+    "sounddevice",
+]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3",
     "ruff>=0.11",
-    "sounddevice>=0.5",
+    "sounddevice",
 ]
 
 [tool.pytest.ini_options]
