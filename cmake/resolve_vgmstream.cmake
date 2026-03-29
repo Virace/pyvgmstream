@@ -1,5 +1,42 @@
 include_guard(GLOBAL)
 
+function(pyvgmstream_replace_link_item list_var old_item new_item)
+    set(updated_items)
+    foreach(link_item IN LISTS ${list_var})
+        if(link_item STREQUAL "${old_item}")
+            list(APPEND updated_items "${new_item}")
+        else()
+            list(APPEND updated_items "${link_item}")
+        endif()
+    endforeach()
+
+    set(${list_var} "${updated_items}" PARENT_SCOPE)
+endfunction()
+
+
+function(pyvgmstream_rewrite_system_vorbis_link_interface target_name)
+    if(NOT TARGET "${target_name}")
+        return()
+    endif()
+
+    get_target_property(interface_link_items "${target_name}" INTERFACE_LINK_LIBRARIES)
+    if(NOT interface_link_items)
+        return()
+    endif()
+
+    if(TARGET Vorbis::VorbisFile)
+        pyvgmstream_replace_link_item(interface_link_items "vorbisfile" "Vorbis::VorbisFile")
+    endif()
+    if(TARGET Vorbis::Vorbis)
+        pyvgmstream_replace_link_item(interface_link_items "vorbis" "Vorbis::Vorbis")
+    endif()
+    if(TARGET Ogg::Ogg)
+        pyvgmstream_replace_link_item(interface_link_items "ogg" "Ogg::Ogg")
+    endif()
+
+    set_property(TARGET "${target_name}" PROPERTY INTERFACE_LINK_LIBRARIES "${interface_link_items}")
+endfunction()
+
 # 本地的 vendored vgmstream 适配层。
 # 该文件属于 pyvgmstream 自有文件，不是从上游直接复制过来的。
 # 上游溯源：
@@ -54,6 +91,12 @@ function(pyvgmstream_resolve_vgmstream)
     endif()
 
     add_subdirectory("${vgm_source_dir}/src" "${vgm_binary_dir}/src" EXCLUDE_FROM_ALL)
+
+    if(APPLE AND USE_VORBIS AND TARGET libvgmstream)
+        # system VorbisFile 通过 imported target 暴露绝对库路径，
+        # 这里把上游导出的裸库名改写掉，避免 macOS 最终链接时只剩 -lvorbisfile/-lvorbis/-logg。
+        pyvgmstream_rewrite_system_vorbis_link_interface(libvgmstream)
+    endif()
 
     if(NOT TARGET pyvgmstream_vgmstream)
         add_library(pyvgmstream_vgmstream INTERFACE)
