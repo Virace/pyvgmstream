@@ -124,7 +124,13 @@ endfunction()
 
 
 function(pyvgmstream_apply_vgmstream_target_defaults target_name)
-    # _native 已经通过 pyvgmstream::vgmstream 间接链接 libvgmstream，
-    # 这里只需要同步编译定义和头文件路径，不能再次把上游 codec 裸库名塞回最终模块。
-    setup_target(${target_name} FALSE)
+    if(WIN32)
+        # Windows 仍然需要 setup_target(..., TRUE) 给最终模块补上 libvorbis import lib，
+        # 否则 _native 会在链接阶段丢失 ov_* / vorbis_* 符号。
+        setup_target(${target_name} TRUE)
+    else()
+        # _native 已经通过 pyvgmstream::vgmstream 间接链接 libvgmstream，
+        # 非 Windows 这里只需要同步编译定义和头文件路径，不能再次把上游裸库名塞回最终模块。
+        setup_target(${target_name} FALSE)
+    endif()
 endfunction()
