@@ -31,9 +31,17 @@ using StreamfilePtr = std::unique_ptr<libstreamfile_t, decltype(&libstreamfile_c
 struct FormatSnapshot {
     int sample_rate;
     int channels;
+    int input_channels;
+    uint32_t channel_layout;
     int subsong_index;
     int subsong_count;
+    int64_t stream_samples;
+    int64_t play_samples;
+    int stream_bitrate;
+    int64_t loop_start;
+    int64_t loop_end;
     bool loop_flag;
+    bool play_forever;
     std::string codec_name;
     std::string layout_name;
     std::string meta_name;
@@ -107,9 +115,17 @@ FormatSnapshot snapshot_format(const libvgmstream_t* lib) {
     return FormatSnapshot{
         format.sample_rate,
         format.channels,
+        format.input_channels,
+        format.channel_layout,
         format.subsong_index,
         format.subsong_count,
+        format.stream_samples,
+        format.play_samples,
+        format.stream_bitrate,
+        format.loop_start,
+        format.loop_end,
         format.loop_flag,
+        format.play_forever,
         std::string(format.codec_name),
         std::string(format.layout_name),
         std::string(format.meta_name),
@@ -142,8 +158,19 @@ py::dict make_probe_result(const std::string& source_path, int requested_subsong
     result["backend_name"] = kBackendName;
     result["sample_rate"] = format.sample_rate;
     result["channels"] = format.channels;
+    result["input_channels"] = format.input_channels;
+    result["channel_layout"] = format.channel_layout;
     result["subsong_count"] = format.subsong_count;
+    result["stream_samples"] = format.stream_samples;
+    result["play_samples"] = format.play_samples;
+    result["duration_seconds"] = format.sample_rate > 0
+        ? static_cast<double>(format.play_samples) / static_cast<double>(format.sample_rate)
+        : 0.0;
+    result["stream_bitrate"] = format.stream_bitrate;
+    result["loop_start"] = format.loop_start;
+    result["loop_end"] = format.loop_end;
     result["loop_flag"] = format.loop_flag;
+    result["play_forever"] = format.play_forever;
     result["codec_name"] = format.codec_name;
     result["layout_name"] = format.layout_name;
     result["meta_name"] = format.meta_name;
@@ -218,6 +245,46 @@ public:
         return snapshot_format(lib_.get()).channels;
     }
 
+    int input_channels() const {
+        ensure_open();
+        return snapshot_format(lib_.get()).input_channels;
+    }
+
+    uint32_t channel_layout() const {
+        ensure_open();
+        return snapshot_format(lib_.get()).channel_layout;
+    }
+
+    int64_t stream_samples() const {
+        ensure_open();
+        return snapshot_format(lib_.get()).stream_samples;
+    }
+
+    int64_t play_samples() const {
+        ensure_open();
+        return snapshot_format(lib_.get()).play_samples;
+    }
+
+    int stream_bitrate() const {
+        ensure_open();
+        return snapshot_format(lib_.get()).stream_bitrate;
+    }
+
+    int64_t loop_start() const {
+        ensure_open();
+        return snapshot_format(lib_.get()).loop_start;
+    }
+
+    int64_t loop_end() const {
+        ensure_open();
+        return snapshot_format(lib_.get()).loop_end;
+    }
+
+    bool play_forever() const {
+        ensure_open();
+        return snapshot_format(lib_.get()).play_forever;
+    }
+
     bool done() const {
         ensure_open();
         return snapshot_decoder(lib_.get()).done;
@@ -263,5 +330,13 @@ PYBIND11_MODULE(_native, module, py::mod_gil_not_used()) {
         .def("close", &NativeStreamHandle::close)
         .def_property_readonly("sample_rate", &NativeStreamHandle::sample_rate)
         .def_property_readonly("channels", &NativeStreamHandle::channels)
+        .def_property_readonly("input_channels", &NativeStreamHandle::input_channels)
+        .def_property_readonly("channel_layout", &NativeStreamHandle::channel_layout)
+        .def_property_readonly("stream_samples", &NativeStreamHandle::stream_samples)
+        .def_property_readonly("play_samples", &NativeStreamHandle::play_samples)
+        .def_property_readonly("stream_bitrate", &NativeStreamHandle::stream_bitrate)
+        .def_property_readonly("loop_start", &NativeStreamHandle::loop_start)
+        .def_property_readonly("loop_end", &NativeStreamHandle::loop_end)
+        .def_property_readonly("play_forever", &NativeStreamHandle::play_forever)
         .def_property_readonly("done", &NativeStreamHandle::done);
 }

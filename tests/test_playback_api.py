@@ -58,6 +58,15 @@ def test_playback_session_streams_real_sample_and_finishes() -> None:
     assert snapshot.state is PlaybackState.FINISHED
     assert snapshot.position_samples > 0
     assert snapshot.position_seconds >= 0.0
+    assert snapshot.stream_samples > 0
+    assert snapshot.play_samples > 0
+    assert snapshot.duration_seconds > 0.0
+    assert snapshot.input_channels > 0
+    assert snapshot.channel_layout >= 0
+    assert snapshot.stream_bitrate >= 0
+    assert snapshot.loop_start >= 0
+    assert snapshot.loop_end >= 0
+    assert isinstance(snapshot.play_forever, bool)
     assert sink.sample_rate == snapshot.sample_rate
     assert sink.channels == snapshot.channels
     assert sink.total_bytes > 0

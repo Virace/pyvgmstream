@@ -12,7 +12,7 @@
 
 其中：
 
-- Python 层基本是薄封装，只负责参数整理、结果投影、异常语义和 WAV 导出。
+- Python 层基本是薄封装，只负责参数整理、结果投影、异常语义、WAV 导出，以及批量转码 / 播放会话这类围绕公开解码流的高层能力。
 - C++ 层只包含上游公开头文件 `libvgmstream.h` 与 `libvgmstream_streamfile.h`，没有直接依赖上游内部头 `vgmstream.h`。
 - 构建层当前直接依赖 vendored 上游仓库的目录结构、CMake 入口和目标名，因此“运行时 API 耦合”不算高，但“源码仓库 / 构建系统耦合”相对更高。
 
@@ -84,9 +84,17 @@
 - `libvgmstream_t::decoder`
 - `libvgmstream_format_t::sample_rate`
 - `libvgmstream_format_t::channels`
+- `libvgmstream_format_t::input_channels`
+- `libvgmstream_format_t::channel_layout`
 - `libvgmstream_format_t::subsong_index`
 - `libvgmstream_format_t::subsong_count`
+- `libvgmstream_format_t::stream_samples`
+- `libvgmstream_format_t::play_samples`
+- `libvgmstream_format_t::stream_bitrate`
+- `libvgmstream_format_t::loop_start`
+- `libvgmstream_format_t::loop_end`
 - `libvgmstream_format_t::loop_flag`
+- `libvgmstream_format_t::play_forever`
 - `libvgmstream_format_t::codec_name`
 - `libvgmstream_format_t::layout_name`
 - `libvgmstream_format_t::meta_name`
@@ -168,6 +176,20 @@
 
 因此“上游负责解码与 EOF 语义”，而“本仓库负责把上游结果整理成 Python 可消费的字节流”。
 
+当前 `StreamHandle` 还会把一批只读格式字段继续透出给 Python：
+
+- `input_channels`
+- `channel_layout`
+- `stream_samples`
+- `play_samples`
+- `duration_seconds`
+- `stream_bitrate`
+- `loop_start`
+- `loop_end`
+- `play_forever`
+
+其中只有 `duration_seconds` 是基于 `play_samples / sample_rate` 的轻量派生，其余字段都直接来自上游公开 `format` 结构。
+
 ### 3.4 `decode_to_wav_file()` / `decode_to_wav_bytes()` 的原理
 
 这两个 API 没有走任何上游 WAV 导出接口，而是：
@@ -181,6 +203,29 @@
 
 - 上游只负责“打开流 + 解码 PCM”
 - WAV 封装完全由 Python 层完成
+
+### 3.5 `transcode_many()` / `transcode_tree()` 的原理
+
+批量转码能力没有引入新的上游入口，而是把现有解码流 API 重新编排成目录批处理：
+
+1. Python 层递归扫描输入路径或消费外部传入的文件列表
+2. 每个文件调用 `open_stream()`
+3. 循环 `read_pcm16(...)`
+4. 用 Python 标准库 `wave` 流式写出 WAV
+5. 在批量层汇总成功/失败结果
+
+因此批量转码的核心依赖仍然是当前公开解码流能力，而不是额外的上游导出接口。
+
+### 3.6 `PlaybackSession` 的原理
+
+播放会话能力同样没有引入新的上游播放器 API，而是复用解码流：
+
+1. `PlaybackSession` 打开 `StreamHandle`
+2. 后台线程循环读取 PCM16 数据
+3. 把 chunk 写给 `PCM16Sink`
+4. 用 `PlaybackSnapshot` 暴露当前进度、状态和上游格式元信息
+
+这意味着当前播放能力本质上是“围绕解码流构建的本地编排层”，而不是对上游内部播放器逻辑的直接映射。
 
 这也是为什么当前导出能力仅限于 WAV，而不是上游支持什么封装就自动暴露什么封装。
 
@@ -287,7 +332,7 @@
 
 - 一个针对 `.wem` 主路径的 Python 包装层
 - 一个把上游公开解码能力投影成 Python 可用 API 的适配器
-- 一个在 Python 层补齐对象模型、上下文管理和 WAV 封装的壳层
+- 一个在 Python 层补齐对象模型、上下文管理、批量转码和可选播放会话的壳层
 
 换句话说，当前 API 的职责是“把上游公开解码接口变成 Python 友好的使用方式”，而不是“吸收上游所有复杂性并重新定义一套音频框架”。
 

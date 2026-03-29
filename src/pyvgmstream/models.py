@@ -11,8 +11,17 @@ class StreamInfo:
     backend_name: str
     sample_rate: int
     channels: int
+    input_channels: int
+    channel_layout: int
     subsong_count: int
+    stream_samples: int
+    play_samples: int
+    duration_seconds: float
+    stream_bitrate: int
+    loop_start: int
+    loop_end: int
     loop_flag: bool
+    play_forever: bool
     codec_name: str
     layout_name: str
     meta_name: str

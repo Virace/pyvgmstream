@@ -24,8 +24,17 @@ def test_probe_real_wem_returns_basic_metadata() -> None:
     assert result.source_path.endswith(".wem")
     assert result.sample_rate > 0
     assert result.channels > 0
+    assert result.input_channels > 0
+    assert result.channel_layout >= 0
     assert result.subsong_count >= 0
     assert isinstance(result.loop_flag, bool)
+    assert isinstance(result.play_forever, bool)
+    assert result.stream_samples > 0
+    assert result.play_samples > 0
+    assert result.duration_seconds > 0.0
+    assert result.stream_bitrate >= 0
+    assert result.loop_start >= 0
+    assert result.loop_end >= 0
     assert result.codec_name
     assert result.layout_name
     assert result.meta_name

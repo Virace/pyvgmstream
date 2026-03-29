@@ -1,3 +1,9 @@
+"""批量 WAV 转码能力。
+
+该模块负责把目录扫描、多进程调度和单文件流式导出组合成稳定的
+Python API，避免下游直接复用脚本逻辑。
+"""
+
 from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor
@@ -21,6 +27,8 @@ DEFAULT_DISPATCH_CHUNKSIZE = 64
 
 @dataclass(frozen=True, slots=True)
 class BatchTranscodeItemResult:
+    """单个输入文件的转码结果。"""
+
     source_path: Path
     output_path: Path
     frame_count: int
@@ -29,11 +37,15 @@ class BatchTranscodeItemResult:
 
     @property
     def success(self) -> bool:
+        """当前条目是否成功转码。"""
+
         return self.error is None
 
 
 @dataclass(frozen=True, slots=True)
 class BatchTranscodeSummary:
+    """一批转码任务的汇总结果。"""
+
     input_root: Path | None
     output_root: Path | None
     processed_count: int
@@ -42,18 +54,26 @@ class BatchTranscodeSummary:
 
     @property
     def success_count(self) -> int:
+        """成功转码的条目数。"""
+
         return self.processed_count - self.failed_count
 
 
 def resolve_root(path_text: PathInput) -> Path:
+    """标准化外部传入路径。"""
+
     return Path(path_text).expanduser().resolve()
 
 
 def iter_sources(input_root: Path, pattern: str = "*.wem") -> Iterable[Path]:
+    """递归扫描输入目录下匹配的音频文件。"""
+
     yield from input_root.rglob(pattern)
 
 
 def build_output_path(source_path: Path, input_root: Path | None, output_root: Path) -> Path:
+    """根据输入根目录推导输出 WAV 路径。"""
+
     if input_root is None:
         return output_root / f"{source_path.stem}.wav"
     return (output_root / source_path.relative_to(input_root)).with_suffix(".wav")
@@ -65,6 +85,8 @@ def transcode_one(
     *,
     chunk_frames: int = DEFAULT_CHUNK_FRAMES,
 ) -> DecodeResult:
+    """把单个输入文件流式导出为 WAV。"""
+
     resolved_source = resolve_root(source_path)
     resolved_output = resolve_root(output_path)
     resolved_output.parent.mkdir(parents=True, exist_ok=True)
@@ -95,6 +117,8 @@ def transcode_one(
 
 
 def _run_transcode_job(job: tuple[str, str, str | None, int]) -> BatchTranscodeItemResult:
+    """子进程序列化入口。"""
+
     source_text, output_root_text, input_root_text, chunk_frames = job
     source_path = Path(source_text)
     input_root = Path(input_root_text) if input_root_text is not None else None
@@ -130,12 +154,15 @@ def transcode_many(
     chunk_frames: int = DEFAULT_CHUNK_FRAMES,
     dispatch_chunksize: int = DEFAULT_DISPATCH_CHUNKSIZE,
 ) -> BatchTranscodeSummary:
+    """批量转码任意来源的输入文件列表。"""
+
     resolved_output_root = resolve_root(output_root)
     resolved_input_root = None if input_root is None else resolve_root(input_root)
     worker_count = max(int(workers), 1)
     resolved_chunk_frames = max(int(chunk_frames), 1)
     resolved_dispatch_chunksize = max(int(dispatch_chunksize), 1)
 
+    # 先把输入标准化成可序列化的 job 列表，后续才能稳定交给多进程。
     jobs = [
         (
             str(resolve_root(source_path)),
@@ -189,6 +216,8 @@ def transcode_tree(
     limit: int | None = None,
     pattern: str = "*.wem",
 ) -> BatchTranscodeSummary:
+    """递归扫描目录并批量转码为 WAV。"""
+
     resolved_input_root = resolve_root(input_root)
     if not resolved_input_root.is_dir():
         raise FileNotFoundError(f"input root does not exist or is not a directory: {resolved_input_root}")

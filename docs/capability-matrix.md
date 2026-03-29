@@ -23,10 +23,15 @@
 | 重置流位置 | `已支持` | `reset()` | 回到流起点 |
 | 导出 WAV 文件 | `已支持` | `decode_to_wav_file()` | 当前唯一文件导出格式 |
 | 导出 WAV 字节 | `已支持` | `decode_to_wav_bytes()` | 当前唯一字节导出格式 |
+| 递归批量转 WAV | `已支持` | `transcode_tree()` | 保留相对目录结构，支持多进程 |
+| 批量转 WAV（任意输入列表） | `已支持` | `transcode_many()` | 适合下游自行组织输入集合 |
+| 读取总时长/总样本等元信息 | `已支持` | `StreamInfo` / `StreamHandle` | 直接投影上游公开 `format` 字段 |
 | OGG 输出 | `未支持` | 无 | 当前不提供 OGG 编码或 OGG 导出 API |
-| 音频设备播放 | `未支持` | 无 | 当前包是解码/导出库，不是播放器 |
-| 播放暂停 / 恢复 | `未支持` | 无 | 没有播放器状态机，也没有设备输出层 |
-| 音量 / 倍速 / 静音 | `未支持` | 无 | 当前没有播放控制层 |
+| 音频设备播放 | `部分支持` | `PlaybackSession` + `SoundDeviceSink` | 核心播放 API 已提供；默认设备输出需要安装 `playback` optional extra，也可接自定义 sink |
+| 播放暂停 / 恢复 | `已支持` | `PlaybackSession.pause()` / `resume()` | 属于播放会话控制，不依赖特定 UI |
+| 停止播放 | `已支持` | `PlaybackSession.stop()` | 会话会等待后台播放线程退出 |
+| 音量控制 | `已支持` | `PlaybackSession(volume_percent=...)` | 当前是简单线性缩放 |
+| 倍速 | `未支持` | 无 | 当前没有时间拉伸或重采样控制层 |
 | WEM-first 主路径 | `已支持` | `probe/open_stream/decode_to_wav_*` | 当前显式支持和测试覆盖集中在 `.wem` |
 | 非 WEM 文件自然可用 | `部分支持` | 同上 | 如果 vendored `vgmstream` 当前配置能打开某些格式，API 可能自然可用，但当前不作为承诺能力 |
 | clone 后源码安装 | `已支持` | `uv build --wheel` / `uv pip install .` / `pip install .` | clone 时需带上 submodule |
@@ -44,16 +49,17 @@
 
 ## WEM 播放控制说明
 
-当前 API 对 “WEM 播放控制” 的支持要分两层理解：
+当前 API 对 “WEM 播放控制” 的支持分两层：
 
 | 主题 | 状态 | 说明 |
 | --- | --- | --- |
 | 解码流进度 | `已支持` | `tell_samples()` / `tell_seconds()` / `done` |
 | 解码流跳转 | `已支持` | `seek_samples()` / `seek_seconds()` / `reset()` |
-| 实际播放暂停 / 恢复 | `未支持` | 当前没有设备输出和播放器状态 |
-| 实际音频播放 | `未支持` | 需要下游自己消费 PCM 并实现播放器 |
+| 播放会话状态 | `已支持` | `PlaybackState` / `PlaybackSnapshot` |
+| 实际播放暂停 / 恢复 | `已支持` | `PlaybackSession.pause()` / `resume()` |
+| 实际音频播放 | `部分支持` | 默认提供 `sounddevice` 示例后端，也允许下游实现自定义 sink |
 
-因此，当前 `pyvgmstream` 支持的是“解码流控制”，不是“播放器控制”。
+因此，当前 `pyvgmstream` 同时支持“解码流控制”和“播放会话控制”；但具体音频设备输出后端仍保持可选和可替换。
 
 ## 开发者关注的 libvgmstream 公共接口
 
@@ -63,6 +69,7 @@
 | --- | --- | --- | --- |
 | `libvgmstream_setup` / `libvgmstream_config_t` | `部分支持` | 后续可暴露 loop / fade / stereo track / downmix / sample format 等控制 | `高` |
 | `libvgmstream_set_log` | `未支持` | 后续可把上游日志接到 Python 日志层 | `高` |
+| `libvgmstream_format_t` 中的总时长/loop/bitrate 等字段 | `已支持` | 现在已经透出到 `StreamInfo` / `StreamHandle` / `PlaybackSnapshot` | `高` |
 | `libstreamfile_open_buffered` / 自定义 `libstreamfile_t` | `未支持` | 后续可扩展到内存流、自定义文件系统、非磁盘输入 | `高` |
 | `libvgmstream_close_stream` | `未支持` | 后续可优化同一 context 下的多流切换 | `中` |
 | `libvgmstream_get_title` | `未支持` | 后续可提供更友好的流标题/显示名 | `中` |
@@ -73,5 +80,5 @@
 
 ## 当前包能力的一句话总结
 
-`pyvgmstream` 当前是一个面向 `.wem` 主路径的 Python 解码与 WAV 导出库。  
-它已经支持 metadata、PCM16 流读取、进度查询、seek/reset 和 WAV 导出；不提供 OGG 输出，也不提供播放器级暂停/恢复控制。
+`pyvgmstream` 当前是一个面向 `.wem` 主路径的 Python 解码、WAV 导出和可选播放控制库。  
+它已经支持 metadata、总时长/loop 等上游格式字段投影、PCM16 流读取、进度查询、seek/reset、批量 WAV 转码，以及基于可选 sink 的播放会话控制。

@@ -10,11 +10,15 @@
 - `open_stream()`: open a decoded PCM16 stream
 - `decode_to_wav_file()`: decode and export to a WAV file
 - `decode_to_wav_bytes()`: decode and export to WAV bytes
+- `transcode_many()` / `transcode_tree()`: batch-transcode into WAV
+- `PlaybackSession` / `PlaybackSnapshot` / `PCM16Sink`: playback control core
+- `pyvgmstream.playback.backends.sounddevice.create_sounddevice_session()`: default optional playback backend
 
 The returned `StreamHandle` currently exposes:
 
 - progress queries: `tell_samples()` / `tell_seconds()` / `done`
 - stream position control: `seek_samples()` / `seek_seconds()` / `reset()`
+- upstream-backed format metadata: `input_channels` / `channel_layout` / `stream_samples` / `play_samples` / `duration_seconds` / `stream_bitrate` / `loop_start` / `loop_end` / `play_forever`
 
 ## Install and Build
 
@@ -63,6 +67,10 @@ Install from the current repository:
 - `uv pip install .`
 - `pip install .`
 
+If you want the default local playback backend, install the optional extra:
+
+- `pip install "pyvgmstream[playback]"`
+
 Force a source build:
 
 - `pip install --no-binary pyvgmstream pyvgmstream`
@@ -85,7 +93,7 @@ Read metadata:
 from pyvgmstream import probe
 
 info = probe("example.wem")
-print(info.sample_rate, info.channels, info.codec_name)
+print(info.sample_rate, info.channels, info.duration_seconds, info.codec_name)
 ```
 
 Read a PCM16 decoded stream:
@@ -95,7 +103,7 @@ from pyvgmstream import open_stream
 
 with open_stream("example.wem") as stream:
     chunk = stream.read_pcm16(4096)
-    print(stream.tell_seconds(), stream.done)
+    print(stream.tell_seconds(), stream.duration_seconds, stream.done)
 ```
 
 Export a WAV file:
@@ -115,6 +123,30 @@ from pyvgmstream import decode_to_wav_bytes
 payload = decode_to_wav_bytes("example.wem")
 print(len(payload))
 ```
+
+Recursively batch-transcode into WAV:
+
+```python
+from pyvgmstream import transcode_tree
+
+summary = transcode_tree("input_wem", "output_wav", workers=4)
+print(summary.processed_count, summary.failed_count)
+```
+
+Use the default optional playback backend:
+
+```python
+from pyvgmstream.playback.backends.sounddevice import create_sounddevice_session
+
+session = create_sounddevice_session("example.wem", volume_percent=25.0)
+session.start()
+session.wait()
+print(session.snapshot().duration_seconds)
+```
+
+For the fuller API surface, see:
+
+- `docs/api.md`
 
 ## License
 

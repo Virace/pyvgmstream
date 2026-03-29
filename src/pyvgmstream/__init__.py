@@ -1,4 +1,4 @@
-"""Public Python package shell for pyvgmstream."""
+"""`pyvgmstream` 的公开 Python 包入口。"""
 
 from .api import decode_to_wav_bytes, decode_to_wav_file, open_stream, probe
 from .errors import PyVGMStreamError

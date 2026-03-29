@@ -13,7 +13,7 @@ PathInput = str | PathLike[str]
 
 
 def probe(path: PathInput, *, subsong: int = 0) -> object:
-    """Probe stream metadata from the current backend."""
+    """读取当前后端返回的流元信息。"""
     from . import _native
 
     native_result = _native.probe(fspath(path), subsong)
@@ -23,8 +23,17 @@ def probe(path: PathInput, *, subsong: int = 0) -> object:
         backend_name=native_result["backend_name"],
         sample_rate=native_result["sample_rate"],
         channels=native_result["channels"],
+        input_channels=native_result["input_channels"],
+        channel_layout=native_result["channel_layout"],
         subsong_count=native_result["subsong_count"],
+        stream_samples=native_result["stream_samples"],
+        play_samples=native_result["play_samples"],
+        duration_seconds=native_result["duration_seconds"],
+        stream_bitrate=native_result["stream_bitrate"],
+        loop_start=native_result["loop_start"],
+        loop_end=native_result["loop_end"],
         loop_flag=native_result["loop_flag"],
+        play_forever=native_result["play_forever"],
         codec_name=native_result["codec_name"],
         layout_name=native_result["layout_name"],
         meta_name=native_result["meta_name"],
@@ -32,7 +41,7 @@ def probe(path: PathInput, *, subsong: int = 0) -> object:
 
 
 def open_stream(path: PathInput, *, subsong: int = 0, config: object | None = None) -> object:
-    """Open a decoded PCM16 stream from the current backend."""
+    """从当前后端打开一个 PCM16 解码流。"""
     del config
 
     from . import _native
@@ -46,7 +55,7 @@ def decode_to_wav_file(
     *,
     config: object | None = None,
 ) -> object:
-    """Decode input audio and export it as a WAV file."""
+    """解码输入音频并导出为 WAV 文件。"""
     del config
 
     wav_payload, sample_rate, channels, frame_count = _decode_wav_payload(in_path)
@@ -64,7 +73,7 @@ def decode_to_wav_file(
 
 
 def decode_to_wav_bytes(path: PathInput, *, config: object | None = None) -> bytes:
-    """Decode input audio and export it as WAV bytes."""
+    """解码输入音频并导出为 WAV 字节。"""
     del config
 
     wav_payload, _sample_rate, _channels, _frame_count = _decode_wav_payload(path)

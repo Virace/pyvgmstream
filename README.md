@@ -10,11 +10,15 @@ English version: `README.en.md`
 - `open_stream()`：打开 PCM16 解码流
 - `decode_to_wav_file()`：解码并导出为 WAV 文件
 - `decode_to_wav_bytes()`：解码并导出为 WAV 字节
+- `transcode_many()` / `transcode_tree()`：批量转码为 WAV
+- `PlaybackSession` / `PlaybackSnapshot` / `PCM16Sink`：播放控制核心
+- `pyvgmstream.playback.backends.sounddevice.create_sounddevice_session()`：默认可选播放后端
 
 基于 `open_stream()` 返回的 `StreamHandle`，当前可用的方法和属性包括：
 
 - 查询解码进度：`tell_samples()` / `tell_seconds()` / `done`
 - 流位置控制：`seek_samples()` / `seek_seconds()` / `reset()`
+- 读取上游格式元信息：`input_channels` / `channel_layout` / `stream_samples` / `play_samples` / `duration_seconds` / `stream_bitrate` / `loop_start` / `loop_end` / `play_forever`
 
 ## 安装与构建
 
@@ -63,6 +67,10 @@ English version: `README.en.md`
 - `uv pip install .`
 - `pip install .`
 
+如果需要默认的本地播放后端，可安装可选 extra：
+
+- `pip install "pyvgmstream[playback]"`
+
 强制走源码构建安装：
 
 - `pip install --no-binary pyvgmstream pyvgmstream`
@@ -85,7 +93,7 @@ English version: `README.en.md`
 from pyvgmstream import probe
 
 info = probe("example.wem")
-print(info.sample_rate, info.channels, info.codec_name)
+print(info.sample_rate, info.channels, info.duration_seconds, info.codec_name)
 ```
 
 读取 PCM16 解码流：
@@ -95,7 +103,7 @@ from pyvgmstream import open_stream
 
 with open_stream("example.wem") as stream:
     chunk = stream.read_pcm16(4096)
-    print(stream.tell_seconds(), stream.done)
+    print(stream.tell_seconds(), stream.duration_seconds, stream.done)
 ```
 
 导出 WAV 文件：
@@ -115,6 +123,30 @@ from pyvgmstream import decode_to_wav_bytes
 payload = decode_to_wav_bytes("example.wem")
 print(len(payload))
 ```
+
+递归批量转码为 WAV：
+
+```python
+from pyvgmstream import transcode_tree
+
+summary = transcode_tree("input_wem", "output_wav", workers=4)
+print(summary.processed_count, summary.failed_count)
+```
+
+使用默认可选播放后端：
+
+```python
+from pyvgmstream.playback.backends.sounddevice import create_sounddevice_session
+
+session = create_sounddevice_session("example.wem", volume_percent=25.0)
+session.start()
+session.wait()
+print(session.snapshot().duration_seconds)
+```
+
+更完整的 API 说明见：
+
+- `docs/api.md`
 
 ## 许可证
 

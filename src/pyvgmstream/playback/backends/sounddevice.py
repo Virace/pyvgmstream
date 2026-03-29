@@ -1,3 +1,5 @@
+"""`sounddevice` 默认播放后端。"""
+
 from __future__ import annotations
 
 from os import PathLike
@@ -10,6 +12,8 @@ PathInput = str | PathLike[str]
 
 
 class SoundDeviceSink:
+    """基于 `sounddevice.RawOutputStream` 的 PCM16 sink。"""
+
     def __init__(self) -> None:
         self._stream = None
 
@@ -18,7 +22,7 @@ class SoundDeviceSink:
             import sounddevice as sd
         except ImportError as exc:
             raise OptionalDependencyError(
-                "sounddevice backend requires the optional 'playback' extra"
+                "sounddevice 后端需要安装可选的 playback extra"
             ) from exc
 
         self._stream = sd.RawOutputStream(
@@ -30,7 +34,7 @@ class SoundDeviceSink:
 
     def write(self, chunk: bytes) -> None:
         if self._stream is None:
-            raise RuntimeError("sounddevice sink is not open")
+            raise RuntimeError("sounddevice sink 尚未打开")
         self._stream.write(chunk)
 
     def close(self) -> None:
@@ -47,6 +51,8 @@ def create_sounddevice_session(
     volume_percent: float = DEFAULT_VOLUME_PERCENT,
     block_frames: int = DEFAULT_PLAYBACK_BLOCK_FRAMES,
 ) -> PlaybackSession:
+    """创建一个使用 `sounddevice` 后端的播放会话。"""
+
     return PlaybackSession(
         source_path,
         sink=SoundDeviceSink(),

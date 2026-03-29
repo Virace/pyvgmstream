@@ -21,6 +21,15 @@ def test_open_stream_real_wem_supports_read_and_seek() -> None:
         assert isinstance(stream, StreamHandle)
         assert stream.sample_rate > 0
         assert stream.channels > 0
+        assert stream.input_channels > 0
+        assert stream.channel_layout >= 0
+        assert stream.stream_samples > 0
+        assert stream.play_samples > 0
+        assert stream.duration_seconds > 0.0
+        assert stream.stream_bitrate >= 0
+        assert stream.loop_start >= 0
+        assert stream.loop_end >= 0
+        assert isinstance(stream.play_forever, bool)
 
         chunk = stream.read_pcm16(1024)
         assert isinstance(chunk, bytes)

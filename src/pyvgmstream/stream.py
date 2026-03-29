@@ -14,6 +14,44 @@ class StreamHandle:
         return self._native_handle.channels
 
     @property
+    def input_channels(self) -> int:
+        return self._native_handle.input_channels
+
+    @property
+    def channel_layout(self) -> int:
+        return self._native_handle.channel_layout
+
+    @property
+    def stream_samples(self) -> int:
+        return self._native_handle.stream_samples
+
+    @property
+    def play_samples(self) -> int:
+        return self._native_handle.play_samples
+
+    @property
+    def duration_seconds(self) -> float:
+        if self.sample_rate <= 0:
+            return 0.0
+        return self.play_samples / self.sample_rate
+
+    @property
+    def stream_bitrate(self) -> int:
+        return self._native_handle.stream_bitrate
+
+    @property
+    def loop_start(self) -> int:
+        return self._native_handle.loop_start
+
+    @property
+    def loop_end(self) -> int:
+        return self._native_handle.loop_end
+
+    @property
+    def play_forever(self) -> bool:
+        return self._native_handle.play_forever
+
+    @property
     def done(self) -> bool:
         return self._native_handle.done
 
