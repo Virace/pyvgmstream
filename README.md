@@ -18,16 +18,63 @@ English version: `README.en.md`
 
 ## 安装与构建
 
-获取仓库时，请确保 submodule 一起拉取：
+如果发布产物中已经包含与你的 Python 版本和平台匹配的 wheel，优先使用 wheel 安装：
+
+- `pip install pyvgmstream`
+
+如果没有匹配的 wheel，请按下面的源码构建前提准备环境。
+
+### 源码构建前提
+
+- Windows：
+  - Python `>=3.10`
+  - CMake `>=3.20`
+  - Visual Studio Build Tools
+  - `Desktop development with C++`
+- macOS：
+  - Python `>=3.10`
+  - Xcode Command Line Tools
+  - `brew install cmake pkg-config libvorbis`
+- Linux：
+  - Python `>=3.10`
+  - `sudo apt-get update`
+  - `sudo apt-get install -y gcc g++ make cmake build-essential git pkg-config libvorbis-dev`
+
+需要对照上游构建文档时，参考：
+
+- `vendor/vgmstream/doc/BUILD.md`
+- `vendor/vgmstream/doc/BUILD-LIB.md`
+
+如果你是从 GitHub 仓库源码安装，还需要带上 submodule：
 
 - `git clone --recursive https://github.com/Virace/pyvgmstream`
 - 或者在 clone 后执行 `git submodule update --init --recursive`
 
-正常源码构建与安装路径：
+如果你是从 PyPI 下载源码分发包，vendored `vgmstream` 已经包含在 sdist 中，不需要再额外初始化 submodule，但仍然需要本地编译环境。
 
-- 构建 wheel：`uv build --wheel`
-- 使用 uv 安装：`uv pip install .`
-- 使用 pip 安装：`pip install .`
+### 常见安装路径
+
+从当前仓库源码构建 wheel：
+
+- `uv build --wheel`
+
+从当前仓库源码安装：
+
+- `uv pip install .`
+- `pip install .`
+
+强制走源码构建安装：
+
+- `pip install --no-binary pyvgmstream pyvgmstream`
+
+### 当前说明
+
+- 当前仓库的发布 workflow 先按 `3.10` 做三平台构建验证。
+- 平台目标当前收敛为：
+  - Windows：`x64`
+  - Linux：`x86_64`
+  - macOS：`arm64`
+- 当前不计划为 macOS 提供 `x64` wheel。
 
 ## 使用示例
 

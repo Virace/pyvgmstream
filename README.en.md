@@ -18,16 +18,63 @@ The returned `StreamHandle` currently exposes:
 
 ## Install and Build
 
-Make sure submodules are available when cloning the repository:
+If a release already provides a wheel matching your Python version and platform, prefer the wheel path:
+
+- `pip install pyvgmstream`
+
+If no matching wheel is available, prepare the source-build environment below.
+
+### Source build prerequisites
+
+- Windows:
+  - Python `>=3.10`
+  - CMake `>=3.20`
+  - MSBuild / Visual Studio Build Tools
+  - the `Desktop development with C++` workload
+- macOS:
+  - Python `>=3.10`
+  - Xcode Command Line Tools
+  - `brew install cmake pkg-config libvorbis`
+- Linux:
+  - Python `>=3.10`
+  - `sudo apt-get update`
+  - `sudo apt-get install -y gcc g++ make cmake build-essential git pkg-config libvorbis-dev`
+
+If you need the upstream build reference, also consult:
+
+- `vendor/vgmstream/doc/BUILD.md`
+- `vendor/vgmstream/doc/BUILD-LIB.md`
+
+If you are installing from a GitHub checkout, make sure submodules are available:
 
 - `git clone --recursive https://github.com/Virace/pyvgmstream`
 - or run `git submodule update --init --recursive` after cloning
 
-Normal source build and installation paths:
+If you are installing from a PyPI source distribution, the vendored `vgmstream` sources are already included in the sdist, so you do not need to initialize submodules, but you still need a local build environment.
 
-- build a wheel: `uv build --wheel`
-- install with uv: `uv pip install .`
-- install with pip: `pip install .`
+### Common installation paths
+
+Build a wheel from the current repository:
+
+- `uv build --wheel`
+
+Install from the current repository:
+
+- `uv pip install .`
+- `pip install .`
+
+Force a source build:
+
+- `pip install --no-binary pyvgmstream pyvgmstream`
+
+### Current note
+
+- The repository workflow currently targets Python `3.10` first for three-platform build verification.
+- The current platform targets are:
+  - Windows: `x64`
+  - Linux: `x86_64`
+  - macOS: `arm64`
+- macOS `x64` wheels are not planned at the moment.
 
 ## Usage Examples
 
