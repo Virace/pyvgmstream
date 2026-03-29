@@ -1,5 +1,21 @@
 include_guard(GLOBAL)
 
+function(pyvgmstream_collect_absolute_library_dirs output_var)
+    set(library_dirs)
+    foreach(library_path IN LISTS ARGN)
+        if(library_path AND IS_ABSOLUTE "${library_path}")
+            get_filename_component(library_dir "${library_path}" DIRECTORY)
+            list(APPEND library_dirs "${library_dir}")
+        endif()
+    endforeach()
+
+    if(library_dirs)
+        list(REMOVE_DUPLICATES library_dirs)
+    endif()
+
+    set(${output_var} "${library_dirs}" PARENT_SCOPE)
+endfunction()
+
 # 本地的 vendored vgmstream 适配层。
 # 该文件属于 pyvgmstream 自有文件，不是从上游直接复制过来的。
 # 上游溯源：
@@ -54,6 +70,20 @@ function(pyvgmstream_resolve_vgmstream)
     endif()
 
     add_subdirectory("${vgm_source_dir}/src" "${vgm_binary_dir}/src" EXCLUDE_FROM_ALL)
+
+    if(APPLE AND USE_VORBIS AND TARGET libvgmstream)
+        pyvgmstream_collect_absolute_library_dirs(
+            vgmstream_system_library_dirs
+            "${VORBISFILE_LIBRARY}"
+            "${VORBIS_LIBRARY}"
+            "${OGG_LIBRARY}"
+        )
+        if(vgmstream_system_library_dirs)
+            # Homebrew 的库目录不在 macOS 链接器默认搜索路径内，
+            # 上游又会把 vorbis/ogg 依赖以裸库名继续向外传播，因此这里补齐搜索目录。
+            target_link_directories(libvgmstream PUBLIC ${vgmstream_system_library_dirs})
+        endif()
+    endif()
 
     if(NOT TARGET pyvgmstream_vgmstream)
         add_library(pyvgmstream_vgmstream INTERFACE)
