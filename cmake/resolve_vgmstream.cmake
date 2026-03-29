@@ -35,6 +35,10 @@ function(pyvgmstream_resolve_vgmstream)
     set(BUILD_STATIC OFF CACHE BOOL "" FORCE)
 
     set(vgm_binary_dir "${CMAKE_CURRENT_BINARY_DIR}/vgmstream-local")
+    set(VGM_SOURCE_DIR "${vgm_source_dir}")
+    set(VGM_BINARY_DIR "${vgm_binary_dir}")
+    set(VGM_SOURCE_DIR "${vgm_source_dir}" PARENT_SCOPE)
+    set(VGM_BINARY_DIR "${vgm_binary_dir}" PARENT_SCOPE)
     include("${vgm_source_dir}/cmake/vgmstream.cmake")
 
     if(WIN32)

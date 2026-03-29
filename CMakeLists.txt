@@ -26,6 +26,9 @@ include(resolve_vgmstream)
 pyvgmstream_resolve_vgmstream()
 
 pybind11_add_module(_native src/native/module.cpp)
+if(MSVC)
+    target_compile_options(_native PRIVATE /utf-8)
+endif()
 target_link_libraries(_native PRIVATE pyvgmstream::vgmstream)
 pyvgmstream_apply_vgmstream_target_defaults(_native)
 

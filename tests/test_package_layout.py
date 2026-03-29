@@ -26,6 +26,8 @@ def test_cmake_uses_vendored_vgmstream_checkout() -> None:
     assert "PYVGMSTREAM_VGMSTREAM_ROOT" not in cmake_text
 
     assert "vendor/vgmstream" in adapter_text
+    assert 'set(VGM_SOURCE_DIR "${vgm_source_dir}")' in adapter_text
+    assert 'set(VGM_BINARY_DIR "${vgm_binary_dir}")' in adapter_text
     assert 'include("${vgm_source_dir}/cmake/vgmstream.cmake")' in adapter_text
     assert 'add_subdirectory("${vgm_source_dir}/src" "${vgm_binary_dir}/src" EXCLUDE_FROM_ALL)' in adapter_text
     assert 'add_library(pyvgmstream::vgmstream ALIAS pyvgmstream_vgmstream)' in adapter_text
@@ -88,8 +90,10 @@ def test_pytest_runtime_temp_stays_under_dot_temp() -> None:
 
 def test_cmake_isolates_windows_specific_runtime_packaging() -> None:
     repo_root = Path(__file__).resolve().parents[1]
+    cmake_text = repo_root.joinpath("CMakeLists.txt").read_text(encoding="utf-8")
     adapter_text = repo_root.joinpath("cmake", "resolve_vgmstream.cmake").read_text(encoding="utf-8")
 
+    assert "/utf-8" in cmake_text
     assert "if(WIN32)" in adapter_text
     assert 'COMMAND lib' in adapter_text
     assert 'list(APPEND runtime_files "${vorbis_dll}")' in adapter_text
