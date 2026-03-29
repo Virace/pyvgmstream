@@ -2,20 +2,52 @@ name: build-and-publish
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*"
-  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  prepare_release:
+    name: prepare_release
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.release_mode.outputs.should_publish }}
+      tag_name: ${{ steps.release_mode.outputs.tag_name }}
+
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 判断发布模式
+        id: release_mode
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "tag_name=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: 校验 tag 来自 main
+        if: steps.release_mode.outputs.should_publish == 'true'
+        shell: bash
+        run: |
+          git fetch origin main --depth=1
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
   build_wheels:
     name: build_wheels_${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+    needs:
+      - prepare_release
     strategy:
       fail-fast: false
       matrix:
@@ -23,15 +55,15 @@ jobs:
           - name: linux-x86_64
             runner: ubuntu-latest
             cibw_arch: x86_64
-            cibw_skip: "pp* *-manylinux_i686 *-musllinux_*"
+            cibw_skip: "*-manylinux_i686 *-musllinux_*"
           - name: windows-x64
             runner: windows-latest
             cibw_arch: AMD64
-            cibw_skip: "pp* *-win32"
+            cibw_skip: "*-win32"
           - name: macos-arm64
             runner: macos-14
             cibw_arch: arm64
-            cibw_skip: "pp*"
+            cibw_skip: ""
 
     steps:
       - name: 检出仓库
@@ -42,13 +74,13 @@ jobs:
       - name: 安装 uv 并准备宿主 Python
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.11"
           enable-cache: true
+
+      - name: 安装宿主 Python 3.11
+        run: uv python install 3.11
 
       - name: 构建 wheel
         env:
-          # 这里的宿主 Python 只用于运行 cibuildwheel 工具本身。
-          # 实际要验证的目标 wheel 版本仍然由 CIBW_BUILD 控制。
           # 先只验证 cp310，确认三平台主链稳定后再放开到 3.11+。
           CIBW_BUILD: "cp310-*"
           CIBW_SKIP: "${{ matrix.cibw_skip }}"
@@ -59,7 +91,8 @@ jobs:
             sh -c "if command -v dnf >/dev/null 2>&1; then dnf install -y pkgconfig libvorbis-devel; else yum install -y pkgconfig libvorbis-devel; fi"
           CIBW_BEFORE_ALL_MACOS: >-
             brew install pkg-config libvorbis
-        run: uvx cibuildwheel --output-dir dist
+          UV_PYTHON: ""
+        run: uvx --python 3.11 cibuildwheel --output-dir dist
 
       - name: 上传 wheel 构建产物
         uses: actions/upload-artifact@v4
@@ -71,6 +104,7 @@ jobs:
     name: build_sdist
     runs-on: ubuntu-latest
     needs:
+      - prepare_release
       - build_wheels
 
     steps:
@@ -82,8 +116,10 @@ jobs:
       - name: 安装 uv 并准备宿主 Python
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.11"
           enable-cache: true
+
+      - name: 安装宿主 Python 3.11
+        run: uv python install 3.11
 
       - name: 构建 sdist
         run: uv build --sdist
@@ -94,13 +130,41 @@ jobs:
           name: sdist
           path: dist/*.tar.gz
 
+  create_release:
+    name: create_release
+    runs-on: ubuntu-latest
+    needs:
+      - prepare_release
+      - build_wheels
+      - build_sdist
+    if: needs.prepare_release.outputs.should_publish == 'true'
+    permissions:
+      contents: write
+
+    steps:
+      - name: 下载所有发布产物
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: "*"
+          merge-multiple: true
+
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${{ needs.prepare_release.outputs.tag_name }}"
+          dist/*
+          --repo "${{ github.repository }}"
+          --generate-notes
+
   publish_pypi:
     name: publish_pypi
     runs-on: ubuntu-latest
     needs:
-      - build_wheels
-      - build_sdist
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+      - prepare_release
+      - create_release
+    if: needs.prepare_release.outputs.should_publish == 'true'
     permissions:
       contents: read
       id-token: write
