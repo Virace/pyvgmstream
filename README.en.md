@@ -7,10 +7,13 @@
 ## Public API
 
 - `probe()`: read stream metadata
+- `probe_buffer()`: read stream metadata from in-memory input
 - `open_stream()`: open a decoded stream while keeping the upstream output sample format
+- `open_stream_from_buffer()`: open a decoded stream from in-memory input
 - `set_log_callback()` / `disable_log_callback()`: configure or disable the upstream global log callback
 - `decode_to_wav_file()`: decode and export to a WAV file
 - `decode_to_wav_bytes()`: decode and export to WAV bytes
+- `decode_buffer_to_wav_file()` / `decode_buffer_to_wav_bytes()`: decode in-memory input and export to WAV
 - `transcode_many()` / `transcode_tree()`: batch-transcode into WAV
 - `PlaybackSession` / `PlaybackSnapshot` / `PCM16Sink`: playback control core
 - `pyvgmstream.playback.backends.sounddevice.create_sounddevice_session()`: default optional playback backend
@@ -99,6 +102,15 @@ info = probe("example.wem")
 print(info.sample_rate, info.channels, info.duration_seconds, info.codec_name)
 ```
 
+Read metadata from in-memory `.wem` data:
+
+```python
+from pyvgmstream import probe_buffer
+
+buffer_info = probe_buffer(wem_bytes, filename_hint="sound.wem")
+print(buffer_info.sample_rate, buffer_info.sample_format)
+```
+
 Attach the upstream log callback:
 
 ```python
@@ -118,6 +130,16 @@ with open_stream("example.wem") as stream:
     chunk = stream.read_frames(4096)
     print(stream.sample_format, stream.sample_size, len(chunk))
     print(stream.tell_seconds(), stream.duration_seconds, stream.done)
+```
+
+Open a decoded stream from in-memory input:
+
+```python
+from pyvgmstream import open_stream_from_buffer
+
+with open_stream_from_buffer(wem_bytes, filename_hint="sound.wem") as stream:
+    chunk = stream.read_frames(4096)
+    print(stream.sample_rate, len(chunk))
 ```
 
 If you explicitly need the PCM16 convenience layer:
@@ -147,6 +169,15 @@ Export WAV bytes:
 from pyvgmstream import decode_to_wav_bytes
 
 payload = decode_to_wav_bytes("example.wem")
+print(len(payload))
+```
+
+Decode in-memory data directly into WAV:
+
+```python
+from pyvgmstream import decode_buffer_to_wav_bytes
+
+payload = decode_buffer_to_wav_bytes(wem_bytes, filename_hint="sound.wem")
 print(len(payload))
 ```
 

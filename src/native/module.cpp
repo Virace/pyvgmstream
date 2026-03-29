@@ -1,6 +1,8 @@
 #include <pybind11/pybind11.h>
 
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -28,6 +30,15 @@ constexpr const char* kBackendName = "pyvgmstream-libvgmstream";
 
 using VgmstreamPtr = std::unique_ptr<libvgmstream_t, decltype(&libvgmstream_free)>;
 using StreamfilePtr = std::unique_ptr<libstreamfile_t, decltype(&libstreamfile_close)>;
+
+struct MemoryFile {
+    std::string name;
+    std::string data;
+};
+
+struct MemoryStreamfilePriv {
+    std::shared_ptr<MemoryFile> file;
+};
 
 std::mutex g_log_callback_mutex;
 PyObject* g_python_log_callback = nullptr;
@@ -77,6 +88,101 @@ StreamfilePtr open_input_streamfile_or_throw(const std::string& source_path) {
         throw py::value_error("could not open input file");
     }
     return streamfile;
+}
+
+int memory_streamfile_read(void* user_data, uint8_t* dst, int64_t offset, int length) {
+    auto* priv = static_cast<MemoryStreamfilePriv*>(user_data);
+    if (!priv || !priv->file || !dst || offset < 0 || length <= 0) {
+        return 0;
+    }
+
+    const auto& data = priv->file->data;
+    const auto data_size = static_cast<int64_t>(data.size());
+    if (offset >= data_size) {
+        return 0;
+    }
+
+    const auto remaining = static_cast<size_t>(data_size - offset);
+    const auto to_copy = std::min(remaining, static_cast<size_t>(length));
+    std::memcpy(dst, data.data() + offset, to_copy);
+    return static_cast<int>(to_copy);
+}
+
+int64_t memory_streamfile_get_size(void* user_data) {
+    auto* priv = static_cast<MemoryStreamfilePriv*>(user_data);
+    if (!priv || !priv->file) {
+        return 0;
+    }
+    return static_cast<int64_t>(priv->file->data.size());
+}
+
+const char* memory_streamfile_get_name(void* user_data) {
+    auto* priv = static_cast<MemoryStreamfilePriv*>(user_data);
+    if (!priv || !priv->file) {
+        return "";
+    }
+    return priv->file->name.c_str();
+}
+
+libstreamfile_t* create_memory_streamfile_base(std::shared_ptr<MemoryFile> file);
+
+libstreamfile_t* memory_streamfile_open(void* user_data, const char* filename) {
+    auto* priv = static_cast<MemoryStreamfilePriv*>(user_data);
+    if (!priv || !priv->file || !filename) {
+        return nullptr;
+    }
+
+    if (priv->file->name != filename) {
+        return nullptr;
+    }
+
+    return create_memory_streamfile_base(priv->file);
+}
+
+void memory_streamfile_close(libstreamfile_t* libsf) {
+    if (!libsf) {
+        return;
+    }
+
+    auto* priv = static_cast<MemoryStreamfilePriv*>(libsf->user_data);
+    delete priv;
+    std::free(libsf);
+}
+
+libstreamfile_t* create_memory_streamfile_base(std::shared_ptr<MemoryFile> file) {
+    if (!file) {
+        return nullptr;
+    }
+
+    auto* libsf = static_cast<libstreamfile_t*>(std::calloc(1, sizeof(libstreamfile_t)));
+    if (!libsf) {
+        return nullptr;
+    }
+
+    auto* priv = new MemoryStreamfilePriv{std::move(file)};
+    libsf->user_data = priv;
+    libsf->read = memory_streamfile_read;
+    libsf->get_size = memory_streamfile_get_size;
+    libsf->get_name = memory_streamfile_get_name;
+    libsf->open = memory_streamfile_open;
+    libsf->close = memory_streamfile_close;
+    return libsf;
+}
+
+StreamfilePtr open_input_memory_streamfile_or_throw(
+    const std::string& buffer_data,
+    const std::string& filename_hint
+) {
+    if (filename_hint.empty()) {
+        throw py::value_error("filename_hint must not be empty");
+    }
+
+    auto file = std::make_shared<MemoryFile>(MemoryFile{filename_hint, buffer_data});
+    libstreamfile_t* libsf = create_memory_streamfile_base(file);
+    if (!libsf) {
+        throw std::runtime_error("failed to allocate in-memory streamfile");
+    }
+    return StreamfilePtr(libsf, &libstreamfile_close);
 }
 
 DecodePolicy build_default_decode_policy() {
@@ -279,31 +385,8 @@ const char* backend_name() {
 
 }  // namespace
 
-class NativeStreamHandle {
+class NativeStreamHandleBase {
 public:
-    NativeStreamHandle(
-        const std::string& source_path,
-        int subsong,
-        int sample_format,
-        int ignore_loop
-    )
-        : lib_(create_context_or_throw()) {
-        auto policy = build_default_decode_policy();
-        if (sample_format != 0) {
-            policy.force_sample_format = static_cast<libvgmstream_sfmt_t>(sample_format);
-        }
-        if (ignore_loop >= 0) {
-            policy.ignore_loop = ignore_loop;
-        }
-        apply_decode_policy(lib_.get(), policy);
-
-        auto streamfile = open_input_streamfile_or_throw(source_path);
-        const int open_result = libvgmstream_open_stream(lib_.get(), streamfile.get(), subsong);
-        if (open_result < 0) {
-            throw py::value_error("not a valid or supported stream");
-        }
-    }
-
     py::bytes read_frames(int frame_count) {
         ensure_open();
         if (frame_count <= 0) {
@@ -411,14 +494,74 @@ public:
         return snapshot_decoder(lib_.get()).done;
     }
 
-private:
+protected:
     void ensure_open() const {
         if (!lib_) {
             throw std::runtime_error("stream handle is closed");
         }
     }
 
+    void initialize_stream(
+        StreamfilePtr&& streamfile,
+        int subsong,
+        int sample_format,
+        int ignore_loop
+    ) {
+        lib_ = create_context_or_throw();
+        auto policy = build_default_decode_policy();
+        if (sample_format != 0) {
+            policy.force_sample_format = static_cast<libvgmstream_sfmt_t>(sample_format);
+        }
+        if (ignore_loop >= 0) {
+            policy.ignore_loop = ignore_loop;
+        }
+        apply_decode_policy(lib_.get(), policy);
+
+        const int open_result = libvgmstream_open_stream(lib_.get(), streamfile.get(), subsong);
+        if (open_result < 0) {
+            throw py::value_error("not a valid or supported stream");
+        }
+    }
+
     VgmstreamPtr lib_{nullptr, &libvgmstream_free};
+};
+
+class NativeStreamHandle : public NativeStreamHandleBase {
+public:
+    NativeStreamHandle(
+        const std::string& source_path,
+        int subsong,
+        int sample_format,
+        int ignore_loop
+    ) {
+        initialize_stream(
+            open_input_streamfile_or_throw(source_path),
+            subsong,
+            sample_format,
+            ignore_loop
+        );
+    }
+};
+
+class NativeBufferStreamHandle : public NativeStreamHandleBase {
+public:
+    NativeBufferStreamHandle(
+        py::bytes buffer_data,
+        const std::string& filename_hint,
+        int subsong,
+        int sample_format,
+        int ignore_loop
+    ) {
+        initialize_stream(
+            open_input_memory_streamfile_or_throw(
+                static_cast<std::string>(buffer_data),
+                filename_hint
+            ),
+            subsong,
+            sample_format,
+            ignore_loop
+        );
+    }
 };
 
 unsigned int vgmstream_version() {
@@ -443,6 +586,57 @@ py::dict probe(const std::string& source_path, int subsong, int sample_format, i
     }
 
     return make_probe_result(source_path, subsong, lib.get());
+}
+
+py::dict probe_buffer(
+    py::bytes buffer_data,
+    const std::string& filename_hint,
+    int subsong,
+    int sample_format,
+    int ignore_loop
+) {
+    auto streamfile = open_input_memory_streamfile_or_throw(
+        static_cast<std::string>(buffer_data),
+        filename_hint
+    );
+    auto lib = create_context_or_throw();
+    auto policy = build_default_decode_policy();
+    if (sample_format != 0) {
+        policy.force_sample_format = static_cast<libvgmstream_sfmt_t>(sample_format);
+    }
+    if (ignore_loop >= 0) {
+        policy.ignore_loop = ignore_loop;
+    }
+    apply_decode_policy(lib.get(), policy);
+
+    const int open_result = libvgmstream_open_stream(lib.get(), streamfile.get(), subsong);
+    if (open_result < 0) {
+        throw py::value_error("not a valid or supported stream");
+    }
+
+    return make_probe_result(filename_hint, subsong, lib.get());
+}
+
+template <typename T>
+void bind_stream_handle_common(py::class_<T>& cls) {
+    cls.def("read_frames", &T::read_frames, py::arg("frame_count"))
+        .def("tell_samples", &T::tell_samples)
+        .def("seek_samples", &T::seek_samples, py::arg("position"))
+        .def("reset", &T::reset)
+        .def("close", &T::close)
+        .def_property_readonly("sample_rate", &T::sample_rate)
+        .def_property_readonly("sample_format", &T::sample_format)
+        .def_property_readonly("sample_size", &T::sample_size)
+        .def_property_readonly("channels", &T::channels)
+        .def_property_readonly("input_channels", &T::input_channels)
+        .def_property_readonly("channel_layout", &T::channel_layout)
+        .def_property_readonly("stream_samples", &T::stream_samples)
+        .def_property_readonly("play_samples", &T::play_samples)
+        .def_property_readonly("stream_bitrate", &T::stream_bitrate)
+        .def_property_readonly("loop_start", &T::loop_start)
+        .def_property_readonly("loop_end", &T::loop_end)
+        .def_property_readonly("play_forever", &T::play_forever)
+        .def_property_readonly("done", &T::done);
 }
 
 PYBIND11_MODULE(_native, module, py::mod_gil_not_used()) {
@@ -473,30 +667,36 @@ PYBIND11_MODULE(_native, module, py::mod_gil_not_used()) {
         py::arg("ignore_loop") = -1,
         "Return probe information from libvgmstream."
     );
-    py::class_<NativeStreamHandle>(module, "NativeStreamHandle")
+    module.def(
+        "probe_buffer",
+        &probe_buffer,
+        py::arg("buffer_data"),
+        py::arg("filename_hint"),
+        py::arg("subsong") = 0,
+        py::arg("sample_format") = 0,
+        py::arg("ignore_loop") = -1,
+        "Return probe information from in-memory input."
+    );
+    auto native_stream_handle = py::class_<NativeStreamHandle>(module, "NativeStreamHandle");
+    native_stream_handle
         .def(
             py::init<const std::string&, int, int, int>(),
             py::arg("source_path"),
             py::arg("subsong") = 0,
             py::arg("sample_format") = 0,
             py::arg("ignore_loop") = -1
-        )
-        .def("read_frames", &NativeStreamHandle::read_frames, py::arg("frame_count"))
-        .def("tell_samples", &NativeStreamHandle::tell_samples)
-        .def("seek_samples", &NativeStreamHandle::seek_samples, py::arg("position"))
-        .def("reset", &NativeStreamHandle::reset)
-        .def("close", &NativeStreamHandle::close)
-        .def_property_readonly("sample_rate", &NativeStreamHandle::sample_rate)
-        .def_property_readonly("sample_format", &NativeStreamHandle::sample_format)
-        .def_property_readonly("sample_size", &NativeStreamHandle::sample_size)
-        .def_property_readonly("channels", &NativeStreamHandle::channels)
-        .def_property_readonly("input_channels", &NativeStreamHandle::input_channels)
-        .def_property_readonly("channel_layout", &NativeStreamHandle::channel_layout)
-        .def_property_readonly("stream_samples", &NativeStreamHandle::stream_samples)
-        .def_property_readonly("play_samples", &NativeStreamHandle::play_samples)
-        .def_property_readonly("stream_bitrate", &NativeStreamHandle::stream_bitrate)
-        .def_property_readonly("loop_start", &NativeStreamHandle::loop_start)
-        .def_property_readonly("loop_end", &NativeStreamHandle::loop_end)
-        .def_property_readonly("play_forever", &NativeStreamHandle::play_forever)
-        .def_property_readonly("done", &NativeStreamHandle::done);
+        );
+    bind_stream_handle_common(native_stream_handle);
+
+    auto native_buffer_stream_handle = py::class_<NativeBufferStreamHandle>(module, "NativeBufferStreamHandle");
+    native_buffer_stream_handle
+        .def(
+            py::init<py::bytes, const std::string&, int, int, int>(),
+            py::arg("buffer_data"),
+            py::arg("filename_hint"),
+            py::arg("subsong") = 0,
+            py::arg("sample_format") = 0,
+            py::arg("ignore_loop") = -1
+        );
+    bind_stream_handle_common(native_buffer_stream_handle);
 }

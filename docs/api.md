@@ -17,6 +17,7 @@
 入口：
 
 - `probe(path, *, subsong=0) -> StreamInfo`
+- `probe_buffer(data, *, filename_hint, subsong=0) -> StreamInfo`
 
 主要返回字段：
 
@@ -48,6 +49,13 @@ print(info.play_samples)
 print(info.codec_name)
 ```
 
+```python
+from pyvgmstream import probe_buffer
+
+info = probe_buffer(wem_bytes, filename_hint="sound.wem")
+print(info.sample_rate, info.sample_format)
+```
+
 ## 3. 上游日志桥接
 
 入口：
@@ -77,6 +85,7 @@ disable_log_callback()
 入口：
 
 - `open_stream(path, *, subsong=0) -> StreamHandle`
+- `open_stream_from_buffer(data, *, filename_hint, subsong=0) -> StreamHandle`
 
 `StreamHandle` 主要能力：
 
@@ -119,6 +128,8 @@ with open_stream("example.wem") as stream:
 
 - `decode_to_wav_file(in_path, out_path)`
 - `decode_to_wav_bytes(path)`
+- `decode_buffer_to_wav_file(data, out_path, *, filename_hint)`
+- `decode_buffer_to_wav_bytes(data, *, filename_hint)`
 
 说明：
 
@@ -134,6 +145,13 @@ from pyvgmstream import decode_to_wav_file
 
 result = decode_to_wav_file("example.wem", "example.wav")
 print(result.output_path, result.frame_count, result.byte_count)
+```
+
+```python
+from pyvgmstream import decode_buffer_to_wav_bytes
+
+payload = decode_buffer_to_wav_bytes(wem_bytes, filename_hint="sound.wem")
+print(len(payload))
 ```
 
 ## 6. 批量转码

@@ -1,6 +1,15 @@
 """`pyvgmstream` 的公开 Python 包入口。"""
 
-from .api import decode_to_wav_bytes, decode_to_wav_file, open_stream, probe
+from .api import (
+    decode_buffer_to_wav_bytes,
+    decode_buffer_to_wav_file,
+    decode_to_wav_bytes,
+    decode_to_wav_file,
+    open_stream,
+    open_stream_from_buffer,
+    probe,
+    probe_buffer,
+)
 from .errors import PyVGMStreamError
 from .log import LogLevel, disable_log_callback, set_log_callback
 from .models import DecodeConfig, DecodeResult, SampleFormat, StreamInfo
@@ -30,9 +39,13 @@ __all__ = [
     "PlaybackSession",
     "PCM16Sink",
     "probe",
+    "probe_buffer",
     "open_stream",
+    "open_stream_from_buffer",
     "decode_to_wav_file",
     "decode_to_wav_bytes",
+    "decode_buffer_to_wav_file",
+    "decode_buffer_to_wav_bytes",
     "transcode_many",
     "transcode_tree",
 ]

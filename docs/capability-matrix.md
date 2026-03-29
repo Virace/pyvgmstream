@@ -16,8 +16,10 @@
 | 能力 | 状态 | 当前入口 | 说明 |
 | --- | --- | --- | --- |
 | 读取流元数据 | `已支持` | `probe()` | 返回 `StreamInfo` |
+| 读取内存输入元数据 | `已支持` | `probe_buffer()` | 适用于已拿到完整 bytes 的单文件输入 |
 | 接收上游日志 | `已支持` | `set_log_callback()` / `disable_log_callback()` | 直接桥接上游全局日志回调 |
 | 打开解码流 | `已支持` | `open_stream()` | 返回 `StreamHandle` |
+| 从内存输入打开解码流 | `已支持` | `open_stream_from_buffer()` | 适用于 `bytes` / `bytearray` / `memoryview` + `filename_hint` |
 | 读取当前输出格式帧数据 | `已支持` | `StreamHandle.read_frames()` | 默认保留上游当前输出采样格式 |
 | 读取 PCM16 数据 | `已支持` | `StreamHandle.read_pcm16()` | 作为显式 PCM16 便捷层保留 |
 | 查询解码进度 | `已支持` | `tell_samples()` / `tell_seconds()` / `done` | 这是解码流进度，不是播放器时钟 |
@@ -25,6 +27,7 @@
 | 重置流位置 | `已支持` | `reset()` | 回到流起点 |
 | 导出 WAV 文件 | `已支持` | `decode_to_wav_file()` | 默认保留当前上游输出格式；也可显式请求特定采样格式 |
 | 导出 WAV 字节 | `已支持` | `decode_to_wav_bytes()` | 默认保留当前上游输出格式；也可显式请求特定采样格式 |
+| 从内存输入导出 WAV | `已支持` | `decode_buffer_to_wav_file()` / `decode_buffer_to_wav_bytes()` | 不需要先落本地磁盘 |
 | 递归批量转 WAV | `已支持` | `transcode_tree()` | 默认保留当前上游输出格式，保留相对目录结构，支持多进程 |
 | 批量转 WAV（任意输入列表） | `已支持` | `transcode_many()` | 默认保留当前上游输出格式；适合下游自行组织输入集合 |
 | 读取总时长/总样本等元信息 | `已支持` | `StreamInfo` / `StreamHandle` | 直接投影上游公开 `format` 字段 |
@@ -72,7 +75,7 @@
 | `libvgmstream_setup` / `libvgmstream_config_t` | `部分支持` | 后续可暴露 loop / fade / stereo track / downmix / sample format 等控制 | `高` |
 | `libvgmstream_set_log` | `已支持` | 已桥接到 Python 全局回调 | `高` |
 | `libvgmstream_format_t` 中的总时长/loop/bitrate 等字段 | `已支持` | 现在已经透出到 `StreamInfo` / `StreamHandle` / `PlaybackSnapshot` | `高` |
-| `libstreamfile_open_buffered` / 自定义 `libstreamfile_t` | `未支持` | 后续可扩展到内存流、自定义文件系统、非磁盘输入 | `高` |
+| `libstreamfile_open_buffered` / 自定义 `libstreamfile_t` | `部分支持` | 已支持单文件内存输入；通用 file-like / 自定义文件系统仍未支持 | `高` |
 | `libvgmstream_close_stream` | `未支持` | 后续可优化同一 context 下的多流切换 | `中` |
 | `libvgmstream_get_title` | `未支持` | 后续可提供更友好的流标题/显示名 | `中` |
 | `libvgmstream_format_describe` | `未支持` | 后续可提供更友好的格式说明 | `中` |

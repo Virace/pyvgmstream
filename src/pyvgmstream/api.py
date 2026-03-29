@@ -11,6 +11,7 @@ from .models import DecodeConfig, DecodeResult, SampleFormat, StreamInfo
 from .stream import StreamHandle
 
 PathInput = str | PathLike[str]
+BufferInput = bytes | bytearray | memoryview
 
 
 def probe(
@@ -36,6 +37,48 @@ def probe(
     native_sample_format = _resolve_native_sample_format(decode_config.sample_format)
     native_ignore_loop = _resolve_native_ignore_loop(decode_config.ignore_loop)
     native_result = _native.probe(fspath(path), subsong, native_sample_format, native_ignore_loop)
+    return _build_stream_info(native_result)
+
+
+def probe_buffer(
+    data: BufferInput,
+    *,
+    filename_hint: str,
+    subsong: int = 0,
+    config: DecodeConfig | None = None,
+) -> StreamInfo:
+    """读取内存输入的流元信息。
+
+    Args:
+        data: 完整输入音频数据。
+        filename_hint: 提供给上游的文件名提示，扩展名会参与格式判断。
+        subsong: 要读取的 subsong 编号，`0` 表示默认值。
+        config: 可选的解码配置；若未设置，则保留上游默认语义。
+
+    Returns:
+        StreamInfo: 当前流的只读元信息。
+    """
+
+    buffer_data = _coerce_buffer_input(data)
+    resolved_filename_hint = _coerce_filename_hint(filename_hint)
+    decode_config = _coerce_decode_config(config)
+    native_sample_format = _resolve_native_sample_format(decode_config.sample_format)
+    native_ignore_loop = _resolve_native_ignore_loop(decode_config.ignore_loop)
+    from . import _native
+
+    native_result = _native.probe_buffer(
+        buffer_data,
+        resolved_filename_hint,
+        subsong,
+        native_sample_format,
+        native_ignore_loop,
+    )
+    return _build_stream_info(native_result)
+
+
+def _build_stream_info(native_result: dict[str, object]) -> StreamInfo:
+    """把 native probe 结果转换成公开数据模型。"""
+
     return StreamInfo(
         source_path=native_result["source_path"],
         subsong=native_result["subsong"],
@@ -96,6 +139,43 @@ def open_stream(
     )
 
 
+def open_stream_from_buffer(
+    data: BufferInput,
+    *,
+    filename_hint: str,
+    subsong: int = 0,
+    config: DecodeConfig | None = None,
+) -> StreamHandle:
+    """从内存输入打开一个解码流。
+
+    Args:
+        data: 完整输入音频数据。
+        filename_hint: 提供给上游的文件名提示，扩展名会参与格式判断。
+        subsong: 要打开的 subsong 编号，`0` 表示默认值。
+        config: 可选的解码配置；若未设置，则保留上游默认语义。
+
+    Returns:
+        StreamHandle: 可持续读取当前输出格式帧数据的流句柄。
+    """
+
+    buffer_data = _coerce_buffer_input(data)
+    resolved_filename_hint = _coerce_filename_hint(filename_hint)
+    decode_config = _coerce_decode_config(config)
+    native_sample_format = _resolve_native_sample_format(decode_config.sample_format)
+    native_ignore_loop = _resolve_native_ignore_loop(decode_config.ignore_loop)
+    from . import _native
+
+    return StreamHandle(
+        _native.NativeBufferStreamHandle(
+            buffer_data,
+            resolved_filename_hint,
+            subsong,
+            native_sample_format,
+            native_ignore_loop,
+        )
+    )
+
+
 def decode_to_wav_file(
     in_path: PathInput,
     out_path: PathInput,
@@ -142,6 +222,68 @@ def decode_to_wav_bytes(path: PathInput, *, config: DecodeConfig | None = None) 
     return wav_payload
 
 
+def decode_buffer_to_wav_file(
+    data: BufferInput,
+    out_path: PathInput,
+    *,
+    filename_hint: str,
+    config: DecodeConfig | None = None,
+) -> DecodeResult:
+    """把内存输入解码并导出为 WAV 文件。
+
+    Args:
+        data: 完整输入音频数据。
+        out_path: 输出 WAV 路径。
+        filename_hint: 提供给上游的文件名提示，扩展名会参与格式判断。
+        config: 可选的解码配置；若未设置，则保留上游默认语义。
+
+    Returns:
+        DecodeResult: 导出结果摘要。
+    """
+
+    wav_payload, sample_rate, channels, frame_count = _decode_buffer_to_wav_payload(
+        data,
+        filename_hint=filename_hint,
+        config=config,
+    )
+    output_path = Path(out_path).expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(wav_payload)
+
+    return DecodeResult(
+        output_path=output_path,
+        sample_rate=sample_rate,
+        channels=channels,
+        frame_count=frame_count,
+        byte_count=output_path.stat().st_size,
+    )
+
+
+def decode_buffer_to_wav_bytes(
+    data: BufferInput,
+    *,
+    filename_hint: str,
+    config: DecodeConfig | None = None,
+) -> bytes:
+    """把内存输入解码并导出为 WAV 字节。
+
+    Args:
+        data: 完整输入音频数据。
+        filename_hint: 提供给上游的文件名提示，扩展名会参与格式判断。
+        config: 可选的解码配置；若未设置，则保留上游默认语义。
+
+    Returns:
+        bytes: 完整 WAV 负载。
+    """
+
+    wav_payload, _sample_rate, _channels, _frame_count = _decode_buffer_to_wav_payload(
+        data,
+        filename_hint=filename_hint,
+        config=config,
+    )
+    return wav_payload
+
+
 def _decode_wav_payload(
     path: PathInput,
     *,
@@ -150,25 +292,43 @@ def _decode_wav_payload(
     """把当前解码流打包成 WAV 负载。"""
 
     with open_stream(path, config=config) as stream:
-        payload = bytearray()
-        total_frames = 0
-        while True:
-            chunk = stream.read_frames(4096)
-            if chunk:
-                payload.extend(chunk)
-                total_frames += len(chunk) // (stream.channels * stream.sample_size)
-            if stream.done:
-                break
+        return _build_wav_payload_from_stream(stream)
 
-        wav_payload = build_wav_payload(
-            sample_format=stream.sample_format,
-            sample_rate=stream.sample_rate,
-            channels=stream.channels,
-            sample_size=stream.sample_size,
-            frame_count=total_frames,
-            pcm_payload=bytes(payload),
-        )
-        return wav_payload, stream.sample_rate, stream.channels, total_frames
+
+def _decode_buffer_to_wav_payload(
+    data: BufferInput,
+    *,
+    filename_hint: str,
+    config: DecodeConfig | None = None,
+) -> tuple[bytes, int, int, int]:
+    """把内存输入流打包成 WAV 负载。"""
+
+    with open_stream_from_buffer(data, filename_hint=filename_hint, config=config) as stream:
+        return _build_wav_payload_from_stream(stream)
+
+
+def _build_wav_payload_from_stream(stream: StreamHandle) -> tuple[bytes, int, int, int]:
+    """从已打开的流读取完整 WAV 负载。"""
+
+    payload = bytearray()
+    total_frames = 0
+    while True:
+        chunk = stream.read_frames(4096)
+        if chunk:
+            payload.extend(chunk)
+            total_frames += len(chunk) // (stream.channels * stream.sample_size)
+        if stream.done:
+            break
+
+    wav_payload = build_wav_payload(
+        sample_format=stream.sample_format,
+        sample_rate=stream.sample_rate,
+        channels=stream.channels,
+        sample_size=stream.sample_size,
+        frame_count=total_frames,
+        pcm_payload=bytes(payload),
+    )
+    return wav_payload, stream.sample_rate, stream.channels, total_frames
 
 
 def _coerce_decode_config(config: DecodeConfig | None) -> DecodeConfig:
@@ -179,6 +339,26 @@ def _coerce_decode_config(config: DecodeConfig | None) -> DecodeConfig:
     if not isinstance(config, DecodeConfig):
         raise TypeError("config must be a DecodeConfig or None")
     return config
+
+
+def _coerce_buffer_input(data: BufferInput) -> bytes:
+    """把外部 bytes-like 输入标准化成原生层可消费的 bytes。"""
+
+    if isinstance(data, bytes):
+        return data
+    if isinstance(data, bytearray):
+        return bytes(data)
+    if isinstance(data, memoryview):
+        return data.tobytes()
+    raise TypeError("buffer input must be bytes-like")
+
+
+def _coerce_filename_hint(filename_hint: str) -> str:
+    """标准化内存输入的文件名提示。"""
+
+    if not isinstance(filename_hint, str) or not filename_hint.strip():
+        raise ValueError("filename_hint must be a non-empty string")
+    return filename_hint
 
 
 def _resolve_native_sample_format(sample_format: SampleFormat | None) -> int:

@@ -264,12 +264,16 @@
 
 ### B. 打开路径与 IO 适配耦合
 
-当前只使用 `libstreamfile_open_from_stdio(...)` 这条路径。
+当前 runtime 输入有两条路径：
+
+- `libstreamfile_open_from_stdio(...)`：本地路径输入
+- 本仓库自定义的 memory-backed `libstreamfile_t`：单文件内存输入
 
 这意味着：
 
-- 当前只直接支持基于本地路径的文件打开
-- 内存流、自定义文件系统、非磁盘来源都还没有隔离成独立适配层
+- 当前已支持基于本地路径的文件打开
+- 当前已支持 `bytes` / `bytearray` / `memoryview` + `filename_hint` 的单文件内存输入
+- 通用 Python file-like、自定义文件系统和 companion-file reopen 仍未隔离成独立适配层
 
 ### B2. 全局日志回调耦合
 
@@ -306,7 +310,7 @@
 2. 原生桥接层：先看 `src/native/module.cpp`
    这里集中维护默认解码策略、上游公开结构快照、Python 绑定导出。
 3. Python 壳层：先看 `src/pyvgmstream/api.py` / `src/pyvgmstream/stream.py` / `src/pyvgmstream/models.py`
-   这里负责对象模型、上下文管理和 WAV 导出，不负责上游解码细节。
+   这里负责对象模型、上下文管理、buffer/path 双入口和 WAV 导出，不负责上游解码细节。
 4. 结构与约束校验：先看 `tests/test_package_layout.py`
    这里不是业务测试，而是仓库结构、溯源锚点和本地适配分层的守门测试。
 
@@ -315,6 +319,7 @@
 | 场景 | 先看哪个本地文件 | 再看哪个上游文件 | 验证方式 |
 | --- | --- | --- | --- |
 | 想调整上游日志桥接或把日志接到别的 Python 日志系统 | `src/native/module.cpp`、`src/pyvgmstream/log.py` | `vendor/vgmstream/src/libvgmstream.h` | `uv run pytest -q tests/test_log_api.py`，必要时再跑 `uv run pytest -q tests` |
+| 想调整内存输入适配层或 `*_buffer` API | `src/native/module.cpp`、`src/pyvgmstream/api.py` | `vendor/vgmstream/src/libvgmstream_streamfile.h` | `uv run pytest -q tests/test_buffer_api.py tests/test_buffer_real_wem.py`，必要时再跑 `uv run pytest -q tests` |
 | 上游仓库目录布局变了，导致构建失败 | `cmake/resolve_vgmstream.cmake` | `vendor/vgmstream/CMakeLists.txt`、`vendor/vgmstream/cmake/vgmstream.cmake`、`vendor/vgmstream/src/CMakeLists.txt` | `uv run pytest -q tests/test_package_layout.py`，必要时再跑 `uv run pytest -q tests` |
 | 上游目标名、include 或 Windows 运行时文件路径变了 | `cmake/resolve_vgmstream.cmake` | 同上，再加 `vendor/vgmstream/ext_libs` 相关路径 | `uv run pytest -q tests/test_package_layout.py`，再做一次实际构建链验证 |
 | 想调整默认解码策略，例如 loop 或输出 sample format | `src/native/module.cpp` 中的 `DecodePolicy` / `build_default_decode_policy()` / `apply_decode_policy(...)` | `vendor/vgmstream/src/libvgmstream.h` | `uv run pytest -q tests` |
@@ -384,7 +389,11 @@
 
 ### 6.3 第三优先级：把输入源适配从 `stdio` 路径抽象出来
 
-当前 `libstreamfile_open_from_stdio(...)` 直接把“输入一定来自本地路径”编码进了绑定层。
+之前 `libstreamfile_open_from_stdio(...)` 直接把“输入一定来自本地路径”编码进了绑定层。现在这一点已经被部分收口：
+
+- 路径输入仍走 `libstreamfile_open_from_stdio(...)`
+- 单文件内存输入走本地 memory-backed `libstreamfile_t`
+- 更通用的 file-like / 自定义 opener 仍未实现
 
 如果后续要降低这部分耦合，可以：
 

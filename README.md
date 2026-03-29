@@ -7,10 +7,13 @@ English version: `README.en.md`
 ## 公开 API
 
 - `probe()`：读取流元数据
+- `probe_buffer()`：读取内存输入的流元数据
 - `open_stream()`：打开保持上游输出采样格式的解码流
+- `open_stream_from_buffer()`：从内存输入打开解码流
 - `set_log_callback()` / `disable_log_callback()`：配置或关闭上游全局日志回调
 - `decode_to_wav_file()`：解码并导出为 WAV 文件
 - `decode_to_wav_bytes()`：解码并导出为 WAV 字节
+- `decode_buffer_to_wav_file()` / `decode_buffer_to_wav_bytes()`：把内存输入解码并导出为 WAV
 - `transcode_many()` / `transcode_tree()`：批量转码为 WAV
 - `PlaybackSession` / `PlaybackSnapshot` / `PCM16Sink`：播放控制核心
 - `pyvgmstream.playback.backends.sounddevice.create_sounddevice_session()`：默认可选播放后端
@@ -99,6 +102,15 @@ info = probe("example.wem")
 print(info.sample_rate, info.channels, info.duration_seconds, info.codec_name)
 ```
 
+读取内存中的 `.wem` 数据：
+
+```python
+from pyvgmstream import probe_buffer
+
+buffer_info = probe_buffer(wem_bytes, filename_hint="sound.wem")
+print(buffer_info.sample_rate, buffer_info.sample_format)
+```
+
 接入上游日志：
 
 ```python
@@ -118,6 +130,16 @@ with open_stream("example.wem") as stream:
     chunk = stream.read_frames(4096)
     print(stream.sample_format, stream.sample_size, len(chunk))
     print(stream.tell_seconds(), stream.duration_seconds, stream.done)
+```
+
+从内存输入打开解码流：
+
+```python
+from pyvgmstream import open_stream_from_buffer
+
+with open_stream_from_buffer(wem_bytes, filename_hint="sound.wem") as stream:
+    chunk = stream.read_frames(4096)
+    print(stream.sample_rate, len(chunk))
 ```
 
 如果你明确需要 PCM16 便捷层，可以显式请求：
@@ -147,6 +169,15 @@ print(result.output_path, result.frame_count)
 from pyvgmstream import decode_to_wav_bytes
 
 payload = decode_to_wav_bytes("example.wem")
+print(len(payload))
+```
+
+直接把内存中的数据转成 WAV：
+
+```python
+from pyvgmstream import decode_buffer_to_wav_bytes
+
+payload = decode_buffer_to_wav_bytes(wem_bytes, filename_hint="sound.wem")
 print(len(payload))
 ```
 
