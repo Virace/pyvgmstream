@@ -1,27 +1,43 @@
 from __future__ import annotations
 
+import io
+import wave
+from os import fspath
 from os import PathLike
+from pathlib import Path
 
-from .errors import NativeBackendUnavailableError
+from .models import DecodeResult, StreamInfo
+from .stream import StreamHandle
 
 PathInput = str | PathLike[str]
 
 
-def _raise_native_backend_unavailable() -> None:
-    raise NativeBackendUnavailableError(
-        "pyvgmstream native backend is not available yet. "
-        "The current repository state only provides the cross-platform package skeleton."
+def probe(path: PathInput, *, subsong: int = 0) -> object:
+    """Probe stream metadata from the current backend."""
+    from . import _native
+
+    native_result = _native.probe(fspath(path), subsong)
+    return StreamInfo(
+        source_path=native_result["source_path"],
+        subsong=native_result["subsong"],
+        backend_name=native_result["backend_name"],
+        sample_rate=native_result["sample_rate"],
+        channels=native_result["channels"],
+        subsong_count=native_result["subsong_count"],
+        loop_flag=native_result["loop_flag"],
+        codec_name=native_result["codec_name"],
+        layout_name=native_result["layout_name"],
+        meta_name=native_result["meta_name"],
     )
 
 
-def probe(path: PathInput, *, subsong: int = 0) -> object:
-    del path, subsong
-    _raise_native_backend_unavailable()
-
-
 def open_stream(path: PathInput, *, subsong: int = 0, config: object | None = None) -> object:
-    del path, subsong, config
-    _raise_native_backend_unavailable()
+    """Open a decoded PCM16 stream from the current backend."""
+    del config
+
+    from . import _native
+
+    return StreamHandle(_native.NativeStreamHandle(fspath(path), subsong))
 
 
 def decode_to_wav_file(
@@ -30,10 +46,46 @@ def decode_to_wav_file(
     *,
     config: object | None = None,
 ) -> object:
-    del in_path, out_path, config
-    _raise_native_backend_unavailable()
+    """Decode input audio and export it as a WAV file."""
+    del config
+
+    wav_payload, sample_rate, channels, frame_count = _decode_wav_payload(in_path)
+    output_path = Path(out_path).expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(wav_payload)
+
+    return DecodeResult(
+        output_path=output_path,
+        sample_rate=sample_rate,
+        channels=channels,
+        frame_count=frame_count,
+        byte_count=output_path.stat().st_size,
+    )
 
 
 def decode_to_wav_bytes(path: PathInput, *, config: object | None = None) -> bytes:
-    del path, config
-    _raise_native_backend_unavailable()
+    """Decode input audio and export it as WAV bytes."""
+    del config
+
+    wav_payload, _sample_rate, _channels, _frame_count = _decode_wav_payload(path)
+    return wav_payload
+
+
+def _decode_wav_payload(path: PathInput) -> tuple[bytes, int, int, int]:
+    with open_stream(path) as stream:
+        buffer = io.BytesIO()
+        total_frames = 0
+        with wave.open(buffer, "wb") as wav_file:
+            wav_file.setnchannels(stream.channels)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(stream.sample_rate)
+
+            while True:
+                chunk = stream.read_pcm16(4096)
+                if chunk:
+                    wav_file.writeframes(chunk)
+                    total_frames += len(chunk) // (stream.channels * 2)
+                if stream.done:
+                    break
+
+        return buffer.getvalue(), stream.sample_rate, stream.channels, total_frames

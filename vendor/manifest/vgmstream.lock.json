@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "component": "vgmstream",
+  "repository": "https://github.com/vgmstream/vgmstream",
+  "pinned_commit": "5d01f5717c1489101918258fbed97659a390c356",
+  "license_file": "vendor/vgmstream/COPYING",
+  "public_api_headers": [
+    "libvgmstream.h",
+    "libvgmstream_streamfile.h"
+  ]
+}
