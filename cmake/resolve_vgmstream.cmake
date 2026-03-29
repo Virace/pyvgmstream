@@ -124,5 +124,7 @@ endfunction()
 
 
 function(pyvgmstream_apply_vgmstream_target_defaults target_name)
-    setup_target(${target_name} TRUE)
+    # _native 已经通过 pyvgmstream::vgmstream 间接链接 libvgmstream，
+    # 这里只需要同步编译定义和头文件路径，不能再次把上游 codec 裸库名塞回最终模块。
+    setup_target(${target_name} FALSE)
 endfunction()
