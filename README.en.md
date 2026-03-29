@@ -2,7 +2,7 @@
 
 中文说明见 `README.md`
 
-`pyvgmstream` is a Python wrapper around `vgmstream`'s public `libvgmstream` API, currently focused on the `.wem` path.
+`pyvgmstream` is a Python wrapper around `vgmstream`'s public `libvgmstream` API.
 
 ## Public API
 
@@ -69,7 +69,8 @@ Force a source build:
 
 ### Current note
 
-- The repository workflow currently targets Python `3.10` first for three-platform build verification.
+- The project's officially supported Python range currently starts at `>=3.10`.
+- The release workflow builds three platforms starting from Python `3.10`.
 - The current platform targets are:
   - Windows: `x64`
   - Linux: `x86_64`
@@ -122,3 +123,4 @@ print(len(payload))
 - The currently included third-party license texts include:
   - `LICENSES/pybind11.txt`
   - `vendor/vgmstream/COPYING`
+  - `vendor/vgmstream/ext_libs/licenses/*`

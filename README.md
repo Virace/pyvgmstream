@@ -2,7 +2,7 @@
 
 English version: `README.en.md`
 
-`pyvgmstream` 是一个面向 Python 的 `vgmstream` 公共 API 包装层，当前以 `.wem` 主路径为重点。
+`pyvgmstream` 是一个面向 Python 的 `vgmstream` 公共 API 包装层。
 
 ## 公开 API
 
@@ -69,7 +69,8 @@ English version: `README.en.md`
 
 ### 当前说明
 
-- 当前仓库的发布 workflow 先按 `3.10` 做三平台构建验证。
+- 当前项目的正式支持范围为 Python `>=3.10`。
+- 发布 workflow 会从 Python `3.10` 起覆盖三平台构建。
 - 平台目标当前收敛为：
   - Windows：`x64`
   - Linux：`x86_64`
@@ -122,3 +123,4 @@ print(len(payload))
 - 当前收录的第三方许可证文本包括：
   - `LICENSES/pybind11.txt`
   - `vendor/vgmstream/COPYING`
+  - `vendor/vgmstream/ext_libs/licenses/*`
