@@ -84,8 +84,8 @@ jobs:
 
       - name: 构建 wheel
         env:
-          # 先只验证 cp310，确认三平台主链稳定后再放开到 3.11+。
-          CIBW_BUILD: "cp310-*"
+          # 发布前执行三平台全版本回归，覆盖 CPython 3.10 到 3.14。
+          CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "${{ matrix.cibw_skip }}"
           CIBW_BUILD_VERBOSITY: "1"
           CIBW_ARCHS: "${{ matrix.cibw_arch }}"
