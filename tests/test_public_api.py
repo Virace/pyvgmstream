@@ -12,11 +12,19 @@ def test_public_api_exports_expected_entrypoints() -> None:
         "PyVGMStreamError",
         "StreamInfo",
         "DecodeResult",
+        "BatchTranscodeItemResult",
+        "BatchTranscodeSummary",
         "StreamHandle",
+        "PlaybackState",
+        "PlaybackSnapshot",
+        "PlaybackSession",
+        "PCM16Sink",
         "probe",
         "open_stream",
         "decode_to_wav_file",
         "decode_to_wav_bytes",
+        "transcode_many",
+        "transcode_tree",
     ]
 
 

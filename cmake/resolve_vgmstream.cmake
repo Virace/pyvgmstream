@@ -94,6 +94,12 @@ function(pyvgmstream_resolve_vgmstream)
 
     add_subdirectory("${vgm_source_dir}/src" "${vgm_binary_dir}/src" EXCLUDE_FROM_ALL)
 
+    if(WIN32 AND TARGET libvgmstream)
+        # Windows 下让上游 stdio streamfile 走 UTF-8 -> wchar_t 的 _wfopen 分支，
+        # 否则中文等非 ASCII 路径会在打开阶段直接失败。
+        target_compile_definitions(libvgmstream PRIVATE VGM_STDIO_UNICODE)
+    endif()
+
     if(APPLE AND USE_VORBIS AND TARGET libvgmstream)
         # system VorbisFile 通过 imported target 暴露绝对库路径，
         # 这里把上游导出的裸库名改写掉，避免 macOS 最终链接时只剩 -lvorbisfile/-lvorbis/-logg。
