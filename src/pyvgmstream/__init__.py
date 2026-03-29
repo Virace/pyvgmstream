@@ -2,6 +2,7 @@
 
 from .api import decode_to_wav_bytes, decode_to_wav_file, open_stream, probe
 from .errors import PyVGMStreamError
+from .log import LogLevel, disable_log_callback, set_log_callback
 from .models import DecodeConfig, DecodeResult, SampleFormat, StreamInfo
 from .playback import PCM16Sink, PlaybackSession, PlaybackSnapshot, PlaybackState
 from .stream import StreamHandle
@@ -14,6 +15,9 @@ from .transcode import (
 
 __all__ = [
     "PyVGMStreamError",
+    "LogLevel",
+    "set_log_callback",
+    "disable_log_callback",
     "SampleFormat",
     "DecodeConfig",
     "StreamInfo",

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import Callable, TypedDict
 
 
 class ProbeResult(TypedDict):
@@ -29,6 +29,9 @@ class ProbeResult(TypedDict):
 
 def backend_name() -> str: ...
 def vgmstream_version() -> int: ...
+def set_log_callback(level: int, callback: Callable[[int, str], None] | None = None) -> None: ...
+def disable_log_callback() -> None: ...
+def _emit_test_log_for_tests(level: int, message: str) -> None: ...
 def probe(
     source_path: str,
     subsong: int = 0,

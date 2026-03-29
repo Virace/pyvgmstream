@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -27,6 +28,9 @@ constexpr const char* kBackendName = "pyvgmstream-libvgmstream";
 
 using VgmstreamPtr = std::unique_ptr<libvgmstream_t, decltype(&libvgmstream_free)>;
 using StreamfilePtr = std::unique_ptr<libstreamfile_t, decltype(&libstreamfile_close)>;
+
+std::mutex g_log_callback_mutex;
+PyObject* g_python_log_callback = nullptr;
 
 struct FormatSnapshot {
     int sample_rate;
@@ -110,6 +114,84 @@ void apply_decode_policy(libvgmstream_t* lib, const DecodePolicy& policy) {
 void apply_default_decode_policy(libvgmstream_t* lib) {
     const auto policy = build_default_decode_policy();
     apply_decode_policy(lib, policy);
+}
+
+void clear_python_log_callback_unlocked() {
+    Py_XDECREF(g_python_log_callback);
+    g_python_log_callback = nullptr;
+}
+
+libvgmstream_loglevel_t coerce_log_level(int level) {
+    switch (level) {
+        case LIBVGMSTREAM_LOG_LEVEL_ALL:
+            return LIBVGMSTREAM_LOG_LEVEL_ALL;
+        case LIBVGMSTREAM_LOG_LEVEL_DEBUG:
+            return LIBVGMSTREAM_LOG_LEVEL_DEBUG;
+        case LIBVGMSTREAM_LOG_LEVEL_INFO:
+            return LIBVGMSTREAM_LOG_LEVEL_INFO;
+        case LIBVGMSTREAM_LOG_LEVEL_NONE:
+            return LIBVGMSTREAM_LOG_LEVEL_NONE;
+        default:
+            throw py::value_error("unsupported libvgmstream log level");
+    }
+}
+
+void python_log_callback_bridge(int level, const char* str) {
+    py::gil_scoped_acquire gil;
+
+    PyObject* callback = nullptr;
+    {
+        std::scoped_lock lock(g_log_callback_mutex);
+        callback = g_python_log_callback;
+        Py_XINCREF(callback);
+    }
+    if (!callback) {
+        return;
+    }
+
+    PyObject* result = PyObject_CallFunction(callback, "is", level, str ? str : "");
+    if (!result) {
+        PyErr_WriteUnraisable(callback);
+    }
+    else {
+        Py_DECREF(result);
+    }
+    Py_DECREF(callback);
+}
+
+void set_log_callback(int level, py::object callback) {
+    const auto log_level = coerce_log_level(level);
+
+    if (!callback.is_none() && !PyCallable_Check(callback.ptr())) {
+        throw py::type_error("callback must be callable or None");
+    }
+
+    std::scoped_lock lock(g_log_callback_mutex);
+    clear_python_log_callback_unlocked();
+
+    if (log_level == LIBVGMSTREAM_LOG_LEVEL_NONE) {
+        libvgmstream_set_log(log_level, nullptr);
+        return;
+    }
+
+    if (callback.is_none()) {
+        libvgmstream_set_log(log_level, nullptr);
+        return;
+    }
+
+    Py_INCREF(callback.ptr());
+    g_python_log_callback = callback.ptr();
+    libvgmstream_set_log(log_level, &python_log_callback_bridge);
+}
+
+void disable_log_callback() {
+    std::scoped_lock lock(g_log_callback_mutex);
+    clear_python_log_callback_unlocked();
+    libvgmstream_set_log(LIBVGMSTREAM_LOG_LEVEL_NONE, nullptr);
+}
+
+void emit_test_log_for_tests(int level, const std::string& message) {
+    python_log_callback_bridge(level, message.c_str());
 }
 
 // 先把上游公开结构拍平成当前桥接层自己的快照，
@@ -367,6 +449,21 @@ PYBIND11_MODULE(_native, module, py::mod_gil_not_used()) {
     module.doc() = "Native libvgmstream bindings for pyvgmstream.";
     module.def("backend_name", &backend_name, "Return the current native backend marker.");
     module.def("vgmstream_version", &vgmstream_version, "Return the linked libvgmstream version.");
+    module.def(
+        "set_log_callback",
+        &set_log_callback,
+        py::arg("level"),
+        py::arg("callback") = py::none(),
+        "Configure libvgmstream global log callback."
+    );
+    module.def("disable_log_callback", &disable_log_callback, "Disable current libvgmstream log callback.");
+    module.def(
+        "_emit_test_log_for_tests",
+        &emit_test_log_for_tests,
+        py::arg("level"),
+        py::arg("message"),
+        "Testing helper that triggers the currently installed Python log bridge."
+    );
     module.def(
         "probe",
         &probe,

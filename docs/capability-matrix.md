@@ -16,6 +16,7 @@
 | 能力 | 状态 | 当前入口 | 说明 |
 | --- | --- | --- | --- |
 | 读取流元数据 | `已支持` | `probe()` | 返回 `StreamInfo` |
+| 接收上游日志 | `已支持` | `set_log_callback()` / `disable_log_callback()` | 直接桥接上游全局日志回调 |
 | 打开解码流 | `已支持` | `open_stream()` | 返回 `StreamHandle` |
 | 读取当前输出格式帧数据 | `已支持` | `StreamHandle.read_frames()` | 默认保留上游当前输出采样格式 |
 | 读取 PCM16 数据 | `已支持` | `StreamHandle.read_pcm16()` | 作为显式 PCM16 便捷层保留 |
@@ -69,7 +70,7 @@
 | 接口/结构 | 当前情况 | 值得关注的原因 | 优先级 |
 | --- | --- | --- | --- |
 | `libvgmstream_setup` / `libvgmstream_config_t` | `部分支持` | 后续可暴露 loop / fade / stereo track / downmix / sample format 等控制 | `高` |
-| `libvgmstream_set_log` | `未支持` | 后续可把上游日志接到 Python 日志层 | `高` |
+| `libvgmstream_set_log` | `已支持` | 已桥接到 Python 全局回调 | `高` |
 | `libvgmstream_format_t` 中的总时长/loop/bitrate 等字段 | `已支持` | 现在已经透出到 `StreamInfo` / `StreamHandle` / `PlaybackSnapshot` | `高` |
 | `libstreamfile_open_buffered` / 自定义 `libstreamfile_t` | `未支持` | 后续可扩展到内存流、自定义文件系统、非磁盘输入 | `高` |
 | `libvgmstream_close_stream` | `未支持` | 后续可优化同一 context 下的多流切换 | `中` |

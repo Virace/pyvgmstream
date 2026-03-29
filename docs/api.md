@@ -48,7 +48,31 @@ print(info.play_samples)
 print(info.codec_name)
 ```
 
-## 3. 解码流读取
+## 3. 上游日志桥接
+
+入口：
+
+- `set_log_callback(callback=None, *, level=LogLevel.INFO) -> None`
+- `disable_log_callback() -> None`
+
+说明：
+
+- 这层直接桥接上游 `libvgmstream_set_log()` 的全局日志回调
+- 回调作用域是进程级，不是单个 `StreamHandle`
+- `callback=None` 时，回退到上游默认 stdout 回调
+- `disable_log_callback()` 会禁用当前日志回调
+
+示例：
+
+```python
+from pyvgmstream import LogLevel, disable_log_callback, set_log_callback
+
+set_log_callback(lambda level, message: print(level, message), level=LogLevel.DEBUG)
+# ... 执行 probe/open_stream/decode 等操作
+disable_log_callback()
+```
+
+## 4. 解码流读取
 
 入口：
 
@@ -89,7 +113,7 @@ with open_stream("example.wem") as stream:
 
 如果下游明确只想拿某种采样格式，可通过 `DecodeConfig(sample_format=...)` 显式请求。
 
-## 4. 单文件 WAV 导出
+## 5. 单文件 WAV 导出
 
 入口：
 
@@ -112,7 +136,7 @@ result = decode_to_wav_file("example.wem", "example.wav")
 print(result.output_path, result.frame_count, result.byte_count)
 ```
 
-## 5. 批量转码
+## 6. 批量转码
 
 入口：
 
@@ -142,7 +166,7 @@ for item in summary.results:
         print(item.source_path, item.error)
 ```
 
-## 6. 播放控制核心
+## 7. 播放控制核心
 
 核心对象：
 
@@ -175,7 +199,7 @@ for item in summary.results:
 - `play_forever`
 - `recent_error`
 
-## 7. 默认可选播放后端
+## 8. 默认可选播放后端
 
 入口：
 

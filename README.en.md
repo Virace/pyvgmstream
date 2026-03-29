@@ -8,6 +8,7 @@
 
 - `probe()`: read stream metadata
 - `open_stream()`: open a decoded stream while keeping the upstream output sample format
+- `set_log_callback()` / `disable_log_callback()`: configure or disable the upstream global log callback
 - `decode_to_wav_file()`: decode and export to a WAV file
 - `decode_to_wav_bytes()`: decode and export to WAV bytes
 - `transcode_many()` / `transcode_tree()`: batch-transcode into WAV
@@ -96,6 +97,16 @@ from pyvgmstream import probe
 
 info = probe("example.wem")
 print(info.sample_rate, info.channels, info.duration_seconds, info.codec_name)
+```
+
+Attach the upstream log callback:
+
+```python
+from pyvgmstream import LogLevel, disable_log_callback, set_log_callback
+
+set_log_callback(lambda level, message: print(level, message), level=LogLevel.INFO)
+# ... run probe/open_stream/decode operations
+disable_log_callback()
 ```
 
 Read a decoded stream in its current output format:

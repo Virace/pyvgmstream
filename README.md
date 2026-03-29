@@ -8,6 +8,7 @@ English version: `README.en.md`
 
 - `probe()`：读取流元数据
 - `open_stream()`：打开保持上游输出采样格式的解码流
+- `set_log_callback()` / `disable_log_callback()`：配置或关闭上游全局日志回调
 - `decode_to_wav_file()`：解码并导出为 WAV 文件
 - `decode_to_wav_bytes()`：解码并导出为 WAV 字节
 - `transcode_many()` / `transcode_tree()`：批量转码为 WAV
@@ -96,6 +97,16 @@ from pyvgmstream import probe
 
 info = probe("example.wem")
 print(info.sample_rate, info.channels, info.duration_seconds, info.codec_name)
+```
+
+接入上游日志：
+
+```python
+from pyvgmstream import LogLevel, disable_log_callback, set_log_callback
+
+set_log_callback(lambda level, message: print(level, message), level=LogLevel.INFO)
+# ... 执行 probe/open_stream/decode 等操作
+disable_log_callback()
 ```
 
 读取保持上游输出采样格式的解码流：

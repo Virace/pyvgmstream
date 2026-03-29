@@ -271,6 +271,14 @@
 - 当前只直接支持基于本地路径的文件打开
 - 内存流、自定义文件系统、非磁盘来源都还没有隔离成独立适配层
 
+### B2. 全局日志回调耦合
+
+当前已经桥接 `libvgmstream_set_log()`，但它仍然有一个需要维护者记住的边界：
+
+- 这是全局回调，不是挂在单个 `libvgmstream_t` 上的实例级回调
+- Python 侧现在通过 `set_log_callback()` / `disable_log_callback()` 暴露这层能力
+- 维护时需要注意 GIL、全局状态和 callback 生命周期
+
 ### C. 仓库布局 / CMake 目标耦合
 
 这是目前最明显的耦合点。
@@ -306,6 +314,7 @@
 
 | 场景 | 先看哪个本地文件 | 再看哪个上游文件 | 验证方式 |
 | --- | --- | --- | --- |
+| 想调整上游日志桥接或把日志接到别的 Python 日志系统 | `src/native/module.cpp`、`src/pyvgmstream/log.py` | `vendor/vgmstream/src/libvgmstream.h` | `uv run pytest -q tests/test_log_api.py`，必要时再跑 `uv run pytest -q tests` |
 | 上游仓库目录布局变了，导致构建失败 | `cmake/resolve_vgmstream.cmake` | `vendor/vgmstream/CMakeLists.txt`、`vendor/vgmstream/cmake/vgmstream.cmake`、`vendor/vgmstream/src/CMakeLists.txt` | `uv run pytest -q tests/test_package_layout.py`，必要时再跑 `uv run pytest -q tests` |
 | 上游目标名、include 或 Windows 运行时文件路径变了 | `cmake/resolve_vgmstream.cmake` | 同上，再加 `vendor/vgmstream/ext_libs` 相关路径 | `uv run pytest -q tests/test_package_layout.py`，再做一次实际构建链验证 |
 | 想调整默认解码策略，例如 loop 或输出 sample format | `src/native/module.cpp` 中的 `DecodePolicy` / `build_default_decode_policy()` / `apply_decode_policy(...)` | `vendor/vgmstream/src/libvgmstream.h` | `uv run pytest -q tests` |
