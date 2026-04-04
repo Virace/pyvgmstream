@@ -15,6 +15,7 @@
 - `decode_to_wav_bytes()`: decode and export to WAV bytes
 - `decode_buffer_to_wav_file()` / `decode_buffer_to_wav_bytes()`: decode in-memory input and export to WAV
 - `transcode_many()` / `transcode_tree()`: batch-transcode into WAV
+- `BatchTranscodeProgress`: batch transcode progress snapshot
 - `PlaybackSession` / `PlaybackSnapshot` / `PCM16Sink`: playback control core
 - `pyvgmstream.playback.backends.sounddevice.create_sounddevice_session()`: default optional playback backend
 
@@ -184,11 +185,17 @@ print(len(payload))
 Recursively batch-transcode into WAV:
 
 ```python
-from pyvgmstream import transcode_tree
+from pyvgmstream import BatchTranscodeProgress, transcode_tree
 
-summary = transcode_tree("input_wem", "output_wav", workers=4)
+
+def on_progress(progress: BatchTranscodeProgress) -> None:
+    print(progress.completed_count, progress.total_count, progress.failed_count)
+
+summary = transcode_tree("input_wem", "output_wav", workers=4, progress_callback=on_progress)
 print(summary.processed_count, summary.failed_count)
 ```
+
+`progress_callback` receives `BatchTranscodeProgress` snapshots asynchronously from the parent process, and callback exceptions do not interrupt transcoding.
 
 Use the default optional playback backend:
 

@@ -158,12 +158,13 @@ print(len(payload))
 
 入口：
 
-- `transcode_many(sources, output_root, *, input_root=None, workers=..., chunk_frames=..., dispatch_chunksize=...)`
-- `transcode_tree(input_root, output_root, *, workers=..., chunk_frames=..., dispatch_chunksize=..., limit=None, pattern="*.wem")`
+- `transcode_many(sources, output_root, *, input_root=None, workers=..., chunk_frames=..., dispatch_chunksize=..., progress_callback=None)`
+- `transcode_tree(input_root, output_root, *, workers=..., chunk_frames=..., dispatch_chunksize=..., limit=None, pattern="*.wem", progress_callback=None)`
 
 主要返回对象：
 
 - `BatchTranscodeItemResult`
+- `BatchTranscodeProgress`
 - `BatchTranscodeSummary`
 
 说明：
@@ -171,13 +172,20 @@ print(len(payload))
 - `transcode_many()` 适合下游已经有自己的输入文件集合
 - `transcode_tree()` 适合直接递归扫描目录
 - 当前默认导出为 WAV，并保留相对目录结构
+- `progress_callback` 会收到 `BatchTranscodeProgress`
+- 进度通知由父进程异步分发，子进程不直接参与通知
+- `progress_callback` 抛出异常时，不会中断当前转码
 
 示例：
 
 ```python
-from pyvgmstream import transcode_tree
+from pyvgmstream import BatchTranscodeProgress, transcode_tree
 
-summary = transcode_tree("input_wem", "output_wav", workers=4)
+
+def on_progress(progress: BatchTranscodeProgress) -> None:
+    print(progress.completed_count, progress.total_count, progress.failed_count)
+
+summary = transcode_tree("input_wem", "output_wav", workers=4, progress_callback=on_progress)
 print(summary.processed_count, summary.failed_count)
 for item in summary.results:
     if not item.success:

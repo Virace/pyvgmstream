@@ -17,6 +17,7 @@ from .playback import PCM16Sink, PlaybackSession, PlaybackSnapshot, PlaybackStat
 from .stream import StreamHandle
 from .transcode import (
     BatchTranscodeItemResult,
+    BatchTranscodeProgress,
     BatchTranscodeSummary,
     transcode_many,
     transcode_tree,
@@ -32,6 +33,7 @@ __all__ = [
     "StreamInfo",
     "DecodeResult",
     "BatchTranscodeItemResult",
+    "BatchTranscodeProgress",
     "BatchTranscodeSummary",
     "StreamHandle",
     "PlaybackState",
@@ -50,4 +52,4 @@ __all__ = [
     "transcode_tree",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
