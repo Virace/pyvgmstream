@@ -15,6 +15,7 @@ English version: `README.en.md`
 - `decode_to_wav_bytes()`：解码并导出为 WAV 字节
 - `decode_buffer_to_wav_file()` / `decode_buffer_to_wav_bytes()`：把内存输入解码并导出为 WAV
 - `transcode_many()` / `transcode_tree()`：批量转码为 WAV
+- `BatchTranscodeProgress`：批量转码进度快照
 - `PlaybackSession` / `PlaybackSnapshot` / `PCM16Sink`：播放控制核心
 - `pyvgmstream.playback.backends.sounddevice.create_sounddevice_session()`：默认可选播放后端
 
@@ -184,11 +185,17 @@ print(len(payload))
 递归批量转码为 WAV：
 
 ```python
-from pyvgmstream import transcode_tree
+from pyvgmstream import BatchTranscodeProgress, transcode_tree
 
-summary = transcode_tree("input_wem", "output_wav", workers=4)
+
+def on_progress(progress: BatchTranscodeProgress) -> None:
+    print(progress.completed_count, progress.total_count, progress.failed_count)
+
+summary = transcode_tree("input_wem", "output_wav", workers=4, progress_callback=on_progress)
 print(summary.processed_count, summary.failed_count)
 ```
+
+`progress_callback` 会在父进程汇总结果时异步收到 `BatchTranscodeProgress`，回调异常不会中断转码。
 
 使用默认可选播放后端：
 

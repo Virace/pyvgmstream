@@ -28,8 +28,9 @@
 | 导出 WAV 文件 | `已支持` | `decode_to_wav_file()` | 默认保留当前上游输出格式；也可显式请求特定采样格式 |
 | 导出 WAV 字节 | `已支持` | `decode_to_wav_bytes()` | 默认保留当前上游输出格式；也可显式请求特定采样格式 |
 | 从内存输入导出 WAV | `已支持` | `decode_buffer_to_wav_file()` / `decode_buffer_to_wav_bytes()` | 不需要先落本地磁盘 |
-| 递归批量转 WAV | `已支持` | `transcode_tree()` | 默认保留当前上游输出格式，保留相对目录结构，支持多进程 |
-| 批量转 WAV（任意输入列表） | `已支持` | `transcode_many()` | 默认保留当前上游输出格式；适合下游自行组织输入集合 |
+| 递归批量转 WAV | `已支持` | `transcode_tree()` | 默认保留当前上游输出格式，保留相对目录结构，支持多进程，也支持异步进度通知 |
+| 批量转 WAV（任意输入列表） | `已支持` | `transcode_many()` | 默认保留当前上游输出格式；适合下游自行组织输入集合，也支持异步进度通知 |
+| 批量转码进度通知 | `已支持` | `BatchTranscodeProgress` + `progress_callback` | 由父进程异步派发；回调异常不会中断转码 |
 | 读取总时长/总样本等元信息 | `已支持` | `StreamInfo` / `StreamHandle` | 直接投影上游公开 `format` 字段 |
 | OGG 输出 | `未支持` | 无 | 当前不提供 OGG 编码或 OGG 导出 API |
 | 音频设备播放 | `部分支持` | `PlaybackSession` + `SoundDeviceSink` | 核心播放 API 已提供；默认设备输出需要安装 `playback` optional extra，也可接自定义 sink |

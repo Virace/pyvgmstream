@@ -7,7 +7,7 @@ from pyvgmstream import _native
 
 
 def test_public_api_exports_expected_entrypoints() -> None:
-    assert pyvgmstream.__version__ == "0.1.0"
+    assert pyvgmstream.__version__ == "0.1.1"
     assert pyvgmstream.__all__ == [
         "PyVGMStreamError",
         "LogLevel",
@@ -18,6 +18,7 @@ def test_public_api_exports_expected_entrypoints() -> None:
         "StreamInfo",
         "DecodeResult",
         "BatchTranscodeItemResult",
+        "BatchTranscodeProgress",
         "BatchTranscodeSummary",
         "StreamHandle",
         "PlaybackState",
