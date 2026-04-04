@@ -1,5 +1,7 @@
 # pyvgmstream
 
+[![PyPI version](https://img.shields.io/pypi/v/pyvgmstream)](https://pypi.org/project/pyvgmstream/)
+
 中文说明见 `README.md`
 
 `pyvgmstream` is a Python wrapper around `vgmstream`'s public `libvgmstream` API.

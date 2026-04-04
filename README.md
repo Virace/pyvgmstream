@@ -1,5 +1,7 @@
 # pyvgmstream
 
+[![PyPI version](https://img.shields.io/pypi/v/pyvgmstream)](https://pypi.org/project/pyvgmstream/)
+
 English version: `README.en.md`
 
 `pyvgmstream` 是一个面向 Python 的 `vgmstream` 公共 API 包装层。
